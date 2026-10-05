@@ -221,12 +221,7 @@ export default function AdminDashboard() {
           </>
         )}
         {activeTab === "Journal Voucher"            && <JournalVoucher />}
-        {activeTab === "notifications"              && (
-          <Notifications
-            notifications={notifications}
-            onDismiss={id => setNotifications(p => p.filter(n => n.id !== id))}
-          />
-        )}
+       
       </main>
     </div>
   );
