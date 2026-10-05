@@ -1,7 +1,7 @@
 import axios from "axios"
 
 // const API_BASE_URL = "http://localhost:5000/api"
-const API_BASE_URL="https://debug-nxby.vercel.app/api"
+const API_BASE_URL="https://software-check-cbuc.vercel.app/api"
 
 // Create axios instance with default config
 const apiClient = axios.create({

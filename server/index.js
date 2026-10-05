@@ -9,7 +9,7 @@ const app = express()
 app.use(
   cors({
     // origin: ["http://localhost:5173"],
-origin: ["https://debug-henna.vercel.app"],
+origin: ["https://software-check.vercel.app"],
 
 
     credentials: true,

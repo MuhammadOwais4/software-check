@@ -35,25 +35,11 @@ import Icon from "@/assets/icon.png";
 const REPORT_ITEMS = [
   { key: "General Ledger",     label: "General Ledger" },
   { key: "Trial Balance",      label: "Trial Balance" },
-  { key: "Balance Sheet",      label: "Balance Sheet" },
-  { key: "ProfitLoss",         label: "Profit & Loss" },
-  { key: "reports",            label: "Business Reports" },
-  { key: "Product Management", label: "Product Management" },
-  { key: "Voucher Query",      label: "Voucher Query" },
-  { key: "Barcode Scanner",    label: "Barcode Scanner" },
 ];
 
 const ACCOUNT_ITEMS = [
-  { key: "Cash Payment Voucher",       label: "Cash Payment Voucher" },
-  { key: "Cash Receipt Voucher",       label: "Cash Receipt Voucher" },
   { key: "Journal Voucher",            label: "Journal Voucher" },
-  { key: "Bank Payment Voucher",       label: "Bank Payment Voucher" },
-  { key: "Bank Receipt Voucher",       label: "Bank Receipt Voucher" },
-  { key: "purchase discoiunt Voucher", label: "Purchase Discount Voucher" },
-  { key: "Supplier Payment Voucher",   label: "Supplier Payment Voucher" },
-  { key: "Customer Receipt Voucher",   label: "Customer Receipt Voucher" },
-  { key: "sales discount Voucher",     label: "Sales Discount Voucher" },
-  { key: "Overhead Payment",           label: "Overhead Payment" },
+
 ];
 
 const CHART_PAGES = ["assets", "liabilities", "equity", "revenue", "expenses"];
@@ -224,16 +210,10 @@ export default function AdminDashboard() {
         </div>
 
         {activeTab === "dashboard"          && <Dashboard products={products} expenses={expenses} sales={sales} notifications={notifications} onTabChange={setActiveTab} />}
-        {activeTab === "stock"              && <StockManagement onStockUpdate={setProducts} onNotification={n => setNotifications(p => [...p, n])} />}
-        {activeTab === "sales"              && <SalesTracking products={products} onSaleComplete={setSales} onNotification={n => setNotifications(p => [...p, n])} />}
         {activeTab === "reports"            && <Reports products={products} expenses={expenses} sales={sales} />}
         {activeTab === "General Ledger"     && <GeneralLedger />}
         {activeTab === "Trial Balance"      && <TrialBalance />}
-        {activeTab === "Balance Sheet"      && <BalanceSheet />}
-        {activeTab === "ProfitLoss"         && <ProfitLoss />}
-        {activeTab === "Product Management" && <ProductManagementDashboard />}
-        {activeTab === "Voucher Query"      && <VoucherQuery />}
-        {activeTab === "Barcode Scanner"    && <BarcodeScannerScreen />}
+
         {activeTab === "chart-of-accounts"  && (
           <>
             {chartPage === "assets"      && <AssetsPage />}
@@ -243,16 +223,7 @@ export default function AdminDashboard() {
             {chartPage === "revenue"     && <RevenuePage />}
           </>
         )}
-        {activeTab === "Cash Payment Voucher"       && <CashPaymentVoucher />}
-        {activeTab === "Cash Receipt Voucher"       && <CashReceiptVoucher />}
         {activeTab === "Journal Voucher"            && <JournalVoucher />}
-        {activeTab === "Bank Payment Voucher"       && <BankPaymentVoucher />}
-        {activeTab === "Bank Receipt Voucher"       && <BankReceiptVoucher />}
-        {activeTab === "purchase discoiunt Voucher" && <PurchaseDiscountVouchers />}
-        {activeTab === "Supplier Payment Voucher"   && <SupplierPaymentVoucher />}
-        {activeTab === "Customer Receipt Voucher"   && <CustomerReceiptVoucher />}
-        {activeTab === "sales discount Voucher"     && <SalesDiscountVouchers />}
-        {activeTab === "Overhead Payment"           && <OverheadPayment />}
         {activeTab === "notifications"              && (
           <Notifications
             notifications={notifications}
