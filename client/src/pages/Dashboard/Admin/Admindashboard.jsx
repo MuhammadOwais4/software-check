@@ -158,9 +158,6 @@ export default function AdminDashboard() {
         <div className="mb-6 border-b border-gray-200 bg-white rounded-t-xl px-4">
           <nav className="-mb-px flex flex-wrap">
             <NavBtn tab="dashboard" label="Dashboard" />
-            <NavBtn tab="stock"     label="Goods Receipt Note" />
-            <NavBtn tab="sales"     label="Sales Tracking" />
-
             <DropdownBtn
               label="Reports"
               isActive={isReportActive}

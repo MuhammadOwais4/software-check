@@ -19,10 +19,18 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Trash2, Edit3, Plus, Save, X, Check } from "lucide-react"
 import ApiHandler from "@/Api/apihandle"
-// import { useNavigate } from "react-router-dom" // REMOVED as per updates
+
+const emptyInline = { debitAccount: "", creditAccount: "", amount: "", step: "debit", narration: "" }
+
+const generateUniqueVoucherNo = () => {
+  const timestamp = Date.now()
+  const random = Math.floor(Math.random() * 1000)
+    .toString()
+    .padStart(3, "0")
+  return `JV-${timestamp}-${random}`
+}
 
 export default function JournalVoucher() {
-  // const navigate = useNavigate() // REMOVED as per updates
   const [voucherNo, setVoucherNo] = useState("")
   const [voucherDate, setVoucherDate] = useState("")
   const [narration, setNarration] = useState("")
@@ -35,13 +43,7 @@ export default function JournalVoucher() {
     description: "",
   })
   const [serialCounter, setSerialCounter] = useState(1)
-  const [inlineEntry, setInlineEntry] = useState({
-    debitAccount: "",
-    creditAccount: "",
-    amount: "",
-    step: "debit",
-    narration: "", // inline narration typed once, mirrored on DR/CR
-  })
+  const [inlineEntry, setInlineEntry] = useState(emptyInline)
   const [showInlineEntry, setShowInlineEntry] = useState(false)
   const [accountOptions, setAccountOptions] = useState([])
   const [loading, setLoading] = useState(false)
@@ -55,13 +57,10 @@ export default function JournalVoucher() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [voucherToDelete, setVoucherToDelete] = useState(null)
   const [deleting, setDeleting] = useState(false)
-  // ADDED state to control on-screen print preview before opening system print
   const [showPrintPreview, setShowPrintPreview] = useState(false)
 
-  // ADDED print handler function
   const handlePrint = () => {
     setShowPrintPreview(true)
-    // wait for the DOM to paint with the print view visible
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         window.print()
@@ -69,7 +68,6 @@ export default function JournalVoucher() {
     })
   }
 
-  // ADDED reset preview after user closes the print dialog (fallback included)
   useEffect(() => {
     const onAfterPrint = () => setShowPrintPreview(false)
     window.addEventListener("afterprint", onAfterPrint)
@@ -77,14 +75,6 @@ export default function JournalVoucher() {
   }, [])
 
   useEffect(() => {
-    const generateUniqueVoucherNo = () => {
-      const timestamp = Date.now()
-      const random = Math.floor(Math.random() * 1000)
-        .toString()
-        .padStart(3, "0")
-      return `JV-${timestamp}-${random}`
-    }
-
     const today = new Date().toISOString().split("T")[0]
     setVoucherNo(generateUniqueVoucherNo())
     setVoucherDate(today)
@@ -187,23 +177,14 @@ export default function JournalVoucher() {
   const cancelEditMode = () => {
     setIsEditMode(false)
     setEditingVoucherId(null)
-    const nextVoucherNo = generateUniqueVoucherNo()
-    setVoucherNo(nextVoucherNo)
+    setVoucherNo(generateUniqueVoucherNo())
     setVoucherDate(new Date().toISOString().split("T")[0])
     setNarration("")
     setEntries([])
     setSerialCounter(1)
     setEditingId(null)
     setEditingEntry({ account: "", amount: "", entryType: "debit", description: "" })
-    setInlineEntry({ debitAccount: "", creditAccount: "", amount: "", step: "debit", narration: "" }) // Reset inline entry narration
-  }
-
-  const generateUniqueVoucherNo = () => {
-    const timestamp = Date.now()
-    const random = Math.floor(Math.random() * 1000)
-      .toString()
-      .padStart(3, "0")
-    return `JV-${timestamp}-${random}`
+    setInlineEntry(emptyInline)
   }
 
   const openDeleteDialog = (voucher) => {
@@ -259,7 +240,7 @@ export default function JournalVoucher() {
         voucherNo: voucherNo,
         voucherType: "JV",
         voucherDate: new Date(voucherDate),
-        narration: derivedNarration, // use derived narration
+        narration: derivedNarration,
         entries,
       }
 
@@ -268,8 +249,7 @@ export default function JournalVoucher() {
       if (isEditMode && editingVoucherId) {
         response = await ApiHandler.updateVoucher(editingVoucherId, voucherData)
       } else {
-        const uniqueVoucherNo = generateUniqueVoucherNo()
-        voucherData.voucherNo = uniqueVoucherNo
+        voucherData.voucherNo = generateUniqueVoucherNo()
 
         let saveAttempts = 0
         let saveSuccessful = false
@@ -299,14 +279,12 @@ export default function JournalVoucher() {
       setTimeout(() => setSaveSuccess(false), 3000)
 
       setEntries([])
-      setNarration("") // Clear top-level narration after save
-      setInlineEntry({ debitAccount: "", creditAccount: "", amount: "", step: "debit", narration: "" }) // Clear inline entry
+      setNarration("")
+      setInlineEntry(emptyInline)
       setSerialCounter(1)
       setIsEditMode(false)
       setEditingVoucherId(null)
-
-      const nextVoucherNo = generateUniqueVoucherNo()
-      setVoucherNo(nextVoucherNo)
+      setVoucherNo(generateUniqueVoucherNo())
 
       await loadAllVouchers()
     } catch (error) {
@@ -325,8 +303,6 @@ export default function JournalVoucher() {
       e.preventDefault()
       if (inlineEntry.step === "debit" && inlineEntry.debitAccount) {
         setInlineEntry({ ...inlineEntry, step: "amount" })
-      } else if (inlineEntry.step === "credit" && inlineEntry.creditAccount && inlineEntry.amount) {
-        handleInlineEntrySubmit()
       }
     }
   }
@@ -336,7 +312,7 @@ export default function JournalVoucher() {
 
     const amount = Number.parseFloat(inlineEntry.amount) || 0
     const currentSerial = serialCounter
-    const description = (inlineEntry.narration || narration || "").trim() //
+    const description = (inlineEntry.narration || narration || "").trim()
 
     const timestamp = Date.now()
     const randomDebit = Math.floor(Math.random() * 1000000)
@@ -349,7 +325,7 @@ export default function JournalVoucher() {
       debitAmount: amount,
       creditAmount: 0,
       entryType: "debit",
-      description: description, //
+      description: description,
       pairId: currentSerial,
     }
 
@@ -360,14 +336,14 @@ export default function JournalVoucher() {
       debitAmount: 0,
       creditAmount: amount,
       entryType: "credit",
-      description: description, //
+      description: description,
       pairId: currentSerial,
     }
 
     if (description) setNarration(description)
 
     setEntries([...entries, debitEntry, creditEntry])
-    setInlineEntry({ debitAccount: "", creditAccount: "", amount: "", step: "debit", narration: "" }) //
+    setInlineEntry(emptyInline)
     setSerialCounter(serialCounter + 1)
     setShowInlineEntry(false)
   }
@@ -385,8 +361,7 @@ export default function JournalVoucher() {
   }
 
   const deleteEntry = (entryIdToDelete) => {
-    const updatedEntries = entries.filter((entry) => entry.id !== entryIdToDelete)
-    setEntries(updatedEntries)
+    setEntries(entries.filter((entry) => entry.id !== entryIdToDelete))
   }
 
   const startEdit = (entry) => {
@@ -426,7 +401,7 @@ export default function JournalVoucher() {
   }
 
   const cancelInlineEntry = () => {
-    setInlineEntry({ debitAccount: "", creditAccount: "", amount: "", step: "debit", narration: "" }) //
+    setInlineEntry(emptyInline)
     setShowInlineEntry(false)
   }
 
@@ -457,15 +432,28 @@ export default function JournalVoucher() {
     return groups
   }, {})
 
+  // Shared dropdown items (useLabel = show full label, else just name)
+  const renderAccountItems = (useLabel = false) =>
+    Object.entries(groupedAccounts).map(([category, accounts]) => (
+      <div key={category}>
+        <div className="px-2 py-1 text-sm text-blue-800 bg-gray-100 font-bold">{category}</div>
+        {accounts.map((account) => (
+          <SelectItem key={account.value} value={account.value} className="text-sm pl-4">
+            {useLabel ? account.label : account.name}
+          </SelectItem>
+        ))}
+      </div>
+    ))
+
+  const inlineAmountNumber = Number.parseFloat(inlineEntry.amount) || 0
+
   return (
-    // WRAPPED ROOT CONTAINER WITH A TOGGLING CLASS TO CONTROL SCREEN PREVIEW OF THE VOUCHER AREA
     <div className={showPrintPreview ? "print-preview" : ""}>
       <div className="min-h-screen bg-gradient-to-br from-gray-50 via-slate-50 to-zinc-50 p-4">
-        {/* WRAPPED INTERACTIVE UI IN no-print SO IT DOESN'T APPEAR ON PAPER */}
         <div className="no-print">
-          <Card className="w-full max-w-6xl mx-auto shadow-2xl border-0 overflow-hidden">
-            <CardHeader className="text-center border-b-0 bg-gradient-to-r from-blue-300 via-blue-300 to-blue-300 text-black py-8">
-              <div className="flex items-center justify-between mb-4">
+          <Card className="w-full max-w-4xl mx-auto shadow-xl border-0 overflow-hidden">
+            <CardHeader className="text-center border-b-0 bg-gradient-to-r from-blue-300 via-blue-300 to-blue-300 text-black py-4">
+              <div className="flex items-center justify-between mb-2">
                 <div className="flex gap-2">
                   <Button
                     variant="outline"
@@ -487,15 +475,14 @@ export default function JournalVoucher() {
                   )}
                 </div>
               </div>
-              <div className="text-lg font-semibold mb-3 opacity-90">demo</div>
-              <CardTitle className="text-3xl font-bold tracking-wide">
+              <div className="text-base font-semibold mb-1 opacity-90">demo</div>
+              <CardTitle className="text-2xl font-bold tracking-wide">
                 Journal Voucher GL {isEditMode && <span className="text-sm">(Editing)</span>}
               </CardTitle>
-              <div className="w-24 h-1 bg-white/30 mx-auto mt-4 rounded-full"></div>
+              <div className="w-20 h-1 bg-white/30 mx-auto mt-2 rounded-full"></div>
             </CardHeader>
 
-            <CardContent className="p-8 bg-white">
-              {/* ADDED Print button next to Save */}
+            <CardContent className="p-4 bg-white">
               <div className="mb-4 flex justify-end">
                 <div className="flex items-center gap-3">
                   {saveSuccess && (
@@ -523,7 +510,7 @@ export default function JournalVoucher() {
               </div>
 
               {showVoucherList && (
-                <div className="mb-8 border-2 border-gray-300 rounded-lg p-4 bg-gray-50">
+                <div className="mb-6 border-2 border-gray-300 rounded-lg p-4 bg-gray-50">
                   <div className="flex justify-between items-center mb-4">
                     <h3 className="text-lg font-bold text-gray-700">Existing Vouchers</h3>
                     <Button
@@ -579,9 +566,9 @@ export default function JournalVoucher() {
                 </div>
               )}
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-                <div className="space-y-3">
-                  <Label htmlFor="voucher-no" className="text-lg font-semibold text-blue-300 flex items-center gap-2">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div className="space-y-2">
+                  <Label htmlFor="voucher-no" className="text-base font-semibold text-blue-300 flex items-center gap-2">
                     <div className="w-2 h-2 bg-blue-300 rounded-full"></div>
                     GL No.
                   </Label>
@@ -589,12 +576,12 @@ export default function JournalVoucher() {
                     id="voucher-no"
                     value={voucherNo}
                     onChange={(e) => setVoucherNo(e.target.value)}
-                    className="font-mono text-lg border-2 border-gray-300 focus:border-blue-300 transition-colors"
+                    className="font-mono text-base border-2 border-gray-300 focus:border-blue-300 transition-colors"
                     disabled={isEditMode}
                   />
                 </div>
-                <div className="space-y-3">
-                  <Label htmlFor="voucher-date" className="text-lg font-semibold text-blue-300 flex items-center gap-2">
+                <div className="space-y-2">
+                  <Label htmlFor="voucher-date" className="text-base font-semibold text-blue-300 flex items-center gap-2">
                     <div className="w-2 h-2 bg-blue-300 rounded-full"></div>
                     Date
                   </Label>
@@ -603,16 +590,16 @@ export default function JournalVoucher() {
                     type="date"
                     value={voucherDate}
                     onChange={(e) => setVoucherDate(e.target.value)}
-                    className="text-lg border-2 border-gray-300 focus:border-black transition-colors"
+                    className="text-base border-2 border-gray-300 focus:border-black transition-colors"
                   />
-                  <div className="text-sm text-gray-800 font-medium bg-gray-100 px-3 py-1 rounded-full inline-block">
+                  <div className="text-xs text-gray-800 font-medium bg-gray-100 px-3 py-1 rounded-full inline-block">
                     Display: {formatDate(voucherDate)}
                   </div>
                 </div>
               </div>
 
-              <div className="mb-8 hidden">
-                <Label htmlFor="narration" className="text-lg font-semibold text-blue-300 flex items-center gap-2 mb-3">
+              <div className="mb-4 hidden">
+                <Label htmlFor="narration" className="text-base font-semibold text-blue-300 flex items-center gap-2 mb-2">
                   <div className="w-2 h-2 bg-blue-300 rounded-full"></div>
                   Narration
                 </Label>
@@ -621,12 +608,12 @@ export default function JournalVoucher() {
                   value={narration}
                   onChange={(e) => setNarration(e.target.value)}
                   placeholder="Enter narration details..."
-                  className="border-2 border-gray-300 focus:border-black transition-colors text-base"
-                  rows={4}
+                  className="border-2 border-gray-300 focus:border-black transition-colors text-sm"
+                  rows={3}
                 />
               </div>
 
-              <div className="mb-4 flex justify-between items-center">
+              <div className="mb-3 flex justify-between items-center">
                 <Button
                   onClick={loadAllAccounts}
                   disabled={loading}
@@ -639,203 +626,168 @@ export default function JournalVoucher() {
               </div>
 
               <div className="border-2 border-gray-200 rounded-xl overflow-hidden shadow-lg">
-                <div className="bg-gradient-to-r from-blue-300 to-blue-300 p-4 text-black flex items-center justify-between">
-                  <h3 className="text-xl font-bold tracking-wide">Chart of Accounts - General Ledger</h3>
-                  {/* REMOVED SAVE BUTTON from here and placed it in the print section */}
+                <div className="bg-gradient-to-r from-blue-300 to-blue-300 p-3 text-black flex items-center justify-between">
+                  <h3 className="text-lg font-bold tracking-wide">Chart of Accounts - General Ledger</h3>
                 </div>
 
                 <div className="overflow-x-auto">
                   <table className="w-full">
                     <thead className="bg-gradient-to-r from-gray-100 to-gray-200">
                       <tr>
-                        <th className="px-3 py-4 text-center border-r border-gray-300 w-20 font-bold text-gray-700">
+                        <th className="px-2 py-3 text-center border-r border-gray-300 w-16 font-bold text-gray-700 text-sm">
                           S.No.
                         </th>
-                        <th className="px-6 py-4 text-left border-r border-gray-300 font-bold text-gray-700">
+                        <th className="px-3 py-3 text-left border-r border-gray-300 font-bold text-gray-700 text-sm">
                           Account & Description
                         </th>
-                        <th className="px-6 py-4 text-center border-r border-gray-300 w-36 font-bold text-black">
+                        <th className="px-3 py-3 text-center border-r border-gray-300 w-32 font-bold text-black text-sm">
                           DR. Amount
                         </th>
-                        <th className="px-6 py-4 text-center border-r border-gray-300 w-36 font-bold text-black">
+                        <th className="px-3 py-3 text-center border-r border-gray-300 w-32 font-bold text-black text-sm">
                           CR. Amount
                         </th>
-                        <th className="px-6 py-4 text-center w-28 font-bold text-gray-700">Actions</th>
+                        <th className="px-3 py-3 text-center w-24 font-bold text-gray-700 text-sm">Actions</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {showInlineEntry && (
-                        <>
-                          <tr className="border-t-2 bg-gradient-to-r from-gray-50 to-gray-100 border-gray-300">
-                            <td className="px-3 py-4 text-center border-r border-gray-300 font-mono text-base font-bold text-blue-300">
+                      {/* INLINE ENTRY: only ONE row at a time (DR first, then CR) */}
+                      {showInlineEntry &&
+                        (inlineEntry.step !== "credit" ? (
+                          /* ---------- STEP 1 & 2: DEBIT ROW ---------- */
+                          <tr className="border-t-2 bg-gray-50 border-gray-300">
+                            <td className="px-2 py-2 text-center border-r border-gray-300 font-mono text-sm font-bold">
                               {serialCounter}
                             </td>
-                            <td className="px-6 py-4 border-r border-gray-300">
-                              <div className="space-y-3">
+                            <td className="px-3 py-2 border-r border-gray-300">
+                              <div className="space-y-2">
                                 <Select
                                   value={inlineEntry.debitAccount}
                                   onValueChange={(value) => setInlineEntry({ ...inlineEntry, debitAccount: value })}
                                 >
                                   <SelectTrigger
                                     onKeyDown={(e) => handleKeyPress(e, "debit")}
-                                    className="border-2 border-gray-400 focus:border-black text-base"
+                                    className="border-2 border-gray-400 focus:border-black text-sm h-9"
                                   >
                                     <SelectValue placeholder="Select debit account" />
                                   </SelectTrigger>
-                                  <SelectContent>
-                                    {Object.entries(groupedAccounts).map(([category, accounts]) => (
-                                      <div key={category}>
-                                        <div className="px-2 py-1 text-lg text-blue-800 bg-gray-100 font-bold">
-                                          {category}
-                                        </div>
-                                        {accounts.map((account) => (
-                                          <SelectItem
-                                            key={account.value}
-                                            value={account.value}
-                                            className="text-base pl-4"
-                                          >
-                                            {account.name}
-                                          </SelectItem>
-                                        ))}
-                                      </div>
-                                    ))}
-                                  </SelectContent>
+                                  <SelectContent>{renderAccountItems(false)}</SelectContent>
                                 </Select>
-                                <div className="bg-gray-200 text-black px-3 py-1 rounded-full text-sm font-bold inline-block">
+                                <div className="bg-gray-200 text-black px-2 py-0.5 rounded-full text-xs font-bold inline-block">
                                   (DR)
                                 </div>
-
                                 <Textarea
                                   value={inlineEntry.narration}
                                   onChange={(e) => setInlineEntry({ ...inlineEntry, narration: e.target.value })}
                                   onKeyDown={handleNarrationKeyDown}
                                   placeholder="Enter narration details..."
-                                  rows={3}
-                                  className="border-2 border-gray-300 focus:border-black transition-colors text-base"
+                                  rows={2}
+                                  className="border-2 border-gray-300 focus:border-black text-sm"
                                 />
                               </div>
                             </td>
-                            <td className="px-6 py-4 text-center border-r border-gray-300">
-                              {inlineEntry.step === "amount" || inlineEntry.step === "credit" ? (
+                            <td className="px-3 py-2 text-center border-r border-gray-300">
+                              {inlineEntry.step === "amount" ? (
                                 <Input
                                   type="number"
                                   step="0.01"
                                   value={inlineEntry.amount}
                                   onChange={(e) => setInlineEntry({ ...inlineEntry, amount: e.target.value })}
                                   onKeyDown={(e) => handleKeyPress(e, "amount")}
-                                  className="w-full text-center text-lg font-bold border-2 border-gray-400 focus:border-black"
+                                  className="w-full text-center font-bold border-2 border-gray-400 focus:border-black h-9"
                                   placeholder="0.00"
-                                  autoFocus={inlineEntry.step === "amount"}
+                                  autoFocus
                                 />
                               ) : (
-                                <span className="text-gray-400 text-lg">-</span>
+                                <span className="text-gray-400">-</span>
                               )}
                             </td>
-                            <td className="px-6 py-4 text-center border-r border-gray-300">
-                              <span className="text-gray-400 text-lg">-</span>
+                            <td className="px-3 py-2 text-center border-r border-gray-300">
+                              <span className="text-gray-400">-</span>
                             </td>
-                            <td className="px-6 py-4 text-center">
+                            <td className="px-3 py-2 text-center">
                               <Button
                                 size="sm"
                                 variant="outline"
                                 onClick={cancelInlineEntry}
-                                className="border-gray-400 text-black hover:bg-gray-100 hover:border-black bg-transparent"
+                                className="border-gray-400 text-black hover:bg-gray-100 bg-transparent"
                               >
                                 <X className="w-4 h-4" />
                               </Button>
                             </td>
                           </tr>
-
-                          <tr className="border-t bg-gradient-to-r from-gray-50 to-gray-100 border-gray-300">
-                            <td className="px-3 py-4 text-center border-r border-gray-300 font-mono text-base font-bold text-black">
+                        ) : (
+                          /* ---------- STEP 3: CREDIT ROW ---------- */
+                          <tr className="border-t-2 bg-gray-50 border-gray-300">
+                            <td className="px-2 py-2 text-center border-r border-gray-300 font-mono text-sm font-bold">
                               {serialCounter}
                             </td>
-                            <td className="px-6 py-4 border-r border-gray-300">
-                              <div className="space-y-3">
+                            <td className="px-3 py-2 border-r border-gray-300">
+                              <div className="space-y-2">
+                                <div className="text-xs text-gray-500">
+                                  DR: {inlineEntry.debitAccount} — {formatAmount(inlineAmountNumber)}
+                                </div>
                                 <Select
                                   value={inlineEntry.creditAccount}
                                   onValueChange={(value) => setInlineEntry({ ...inlineEntry, creditAccount: value })}
-                                  disabled={inlineEntry.step !== "credit"}
                                 >
                                   <SelectTrigger
                                     onKeyDown={(e) => handleKeyPress(e, "credit")}
-                                    className="border-2 border-gray-400 focus:border-black text-base disabled:opacity-50"
+                                    className="border-2 border-gray-400 focus:border-black text-sm h-9"
                                   >
                                     <SelectValue placeholder="Select credit account" />
                                   </SelectTrigger>
-                                  <SelectContent>
-                                    {Object.entries(groupedAccounts).map(([category, accounts]) => (
-                                      <div key={category}>
-                                        <div className="px-2 py-1 text-lg text-blue-800 bg-gray-100 font-bold">
-                                          {category}
-                                        </div>
-                                        {accounts.map((account) => (
-                                          <SelectItem
-                                            key={account.value}
-                                            value={account.value}
-                                            className="text-base pl-4"
-                                          >
-                                            {account.name}
-                                          </SelectItem>
-                                        ))}
-                                      </div>
-                                    ))}
-                                  </SelectContent>
+                                  <SelectContent>{renderAccountItems(false)}</SelectContent>
                                 </Select>
-                                <div className="bg-gray-200 text-black px-3 py-1 rounded-full text-sm font-bold inline-block">
+                                <div className="bg-gray-200 text-black px-2 py-0.5 rounded-full text-xs font-bold inline-block">
                                   (CR)
                                 </div>
-
-                                <Textarea
-                                  value={inlineEntry.narration}
-                                  onChange={(e) => setInlineEntry({ ...inlineEntry, narration: e.target.value })}
-                                  onKeyDown={handleNarrationKeyDown}
-                                  placeholder="Enter narration details..."
-                                  rows={3}
-                                  className="border-2 border-gray-300 focus:border-black transition-colors text-base"
-                                />
                               </div>
                             </td>
-                            <td className="px-6 py-4 text-center border-r border-gray-300">
-                              <span className="text-gray-400 text-lg">-</span>
+                            <td className="px-3 py-2 text-center border-r border-gray-300">
+                              <span className="text-gray-400">-</span>
                             </td>
-                            <td className="px-6 py-4 text-center border-r border-gray-300">
-                              {inlineEntry.step === "credit" && inlineEntry.amount ? (
-                                <span className="font-mono text-lg font-bold text-black bg-gray-200 px-3 py-1 rounded-lg">
-                                  {formatAmount(Number.parseFloat(inlineEntry.amount))}
-                                </span>
-                              ) : (
-                                <span className="text-gray-400 text-lg">-</span>
-                              )}
+                            <td className="px-3 py-2 text-center border-r border-gray-300">
+                              <span className="font-mono font-bold text-black bg-gray-200 px-2 py-1 rounded">
+                                {formatAmount(inlineAmountNumber)}
+                              </span>
                             </td>
-                            <td className="px-6 py-4 text-center">
-                              {inlineEntry.step === "credit" && inlineEntry.creditAccount && inlineEntry.amount ? (
+                            <td className="px-3 py-2 text-center">
+                              <div className="flex gap-1 justify-center">
+                                {inlineEntry.creditAccount && (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={handleInlineEntrySubmit}
+                                    className="border-green-600 text-green-600 hover:bg-green-50 hover:border-green-700 bg-transparent"
+                                    title="Add Entry"
+                                  >
+                                    <Plus className="w-4 h-4" />
+                                  </Button>
+                                )}
                                 <Button
                                   size="sm"
                                   variant="outline"
-                                  onClick={handleInlineEntrySubmit}
-                                  className="border-green-600 text-green-600 hover:bg-green-50 hover:border-green-700 bg-transparent"
-                                  title="Add Double Entry (Debit & Credit)"
+                                  onClick={cancelInlineEntry}
+                                  className="border-gray-400 text-black hover:bg-gray-100 bg-transparent"
                                 >
-                                  <Plus className="w-4 h-4" />
+                                  <X className="w-4 h-4" />
                                 </Button>
-                              ) : null}
+                              </div>
                             </td>
                           </tr>
-                        </>
-                      )}
+                        ))}
 
                       {entries.map((entry) => (
                         <tr
                           key={entry.id}
                           className="border-t hover:bg-gray-50 transition-colors bg-gray-25 border-gray-200"
                         >
-                          <td className="px-3 py-4 text-center border-r border-gray-200 font-mono text-base font-semibold text-gray-700">
+                          <td className="px-2 py-3 text-center border-r border-gray-200 font-mono text-sm font-semibold text-gray-700">
                             {entry.serialNo}
                           </td>
-                          <td className="px-6 py-4 border-r border-gray-200">
+                          <td className="px-3 py-3 border-r border-gray-200">
                             {editingId === entry.id ? (
-                              <div className="space-y-3">
+                              <div className="space-y-2">
                                 <Select
                                   value={editingEntry.account}
                                   onValueChange={(value) => setEditingEntry({ ...editingEntry, account: value })}
@@ -843,24 +795,7 @@ export default function JournalVoucher() {
                                   <SelectTrigger className="border-2 border-gray-400 focus:border-black">
                                     <SelectValue />
                                   </SelectTrigger>
-                                  <SelectContent>
-                                    {Object.entries(groupedAccounts).map(([category, accounts]) => (
-                                      <div key={category}>
-                                        <div className="px-2 py-1 text-xs font-semibold text-gray-500 bg-gray-100">
-                                          {category}
-                                        </div>
-                                        {accounts.map((account) => (
-                                          <SelectItem
-                                            key={account.value}
-                                            value={account.value}
-                                            className="text-base pl-4"
-                                          >
-                                            {account.label}
-                                          </SelectItem>
-                                        ))}
-                                      </div>
-                                    ))}
-                                  </SelectContent>
+                                  <SelectContent>{renderAccountItems(true)}</SelectContent>
                                 </Select>
                                 <Input
                                   value={editingEntry.description}
@@ -871,57 +806,57 @@ export default function JournalVoucher() {
                               </div>
                             ) : (
                               <div>
-                                <span className="font-semibold text-gray-800 text-base">{entry.account}</span>
+                                <span className="font-semibold text-gray-800 text-sm">{entry.account}</span>
                                 <div
-                                  className={`inline-block ml-3 px-2 py-1 rounded-full text-xs font-bold ${
+                                  className={`inline-block ml-3 px-2 py-0.5 rounded-full text-xs font-bold ${
                                     entry.entryType === "debit" ? "bg-gray-200 text-black" : "bg-gray-300 text-black"
                                   }`}
                                 >
                                   ({entry.entryType === "debit" ? "DR" : "CR"})
                                 </div>
                                 {entry.description && (
-                                  <div className="text-base text-gray-600 mt-2 bg-gray-50 p-2 rounded-lg">
+                                  <div className="text-sm text-gray-600 mt-1 bg-gray-50 p-2 rounded-lg">
                                     {entry.description}
                                   </div>
                                 )}
                               </div>
                             )}
                           </td>
-                          <td className="px-6 py-4 text-center border-r border-gray-200">
+                          <td className="px-3 py-3 text-center border-r border-gray-200">
                             {editingId === entry.id && editingEntry.entryType === "debit" ? (
                               <Input
                                 type="number"
                                 step="0.01"
                                 value={editingEntry.amount}
                                 onChange={(e) => setEditingEntry({ ...editingEntry, amount: e.target.value })}
-                                className="w-full text-center text-lg font-bold border-2 border-gray-400 focus:border-black"
+                                className="w-full text-center font-bold border-2 border-gray-400 focus:border-black"
                               />
                             ) : entry.debitAmount > 0 ? (
-                              <span className="font-mono text-lg font-bold text-black bg-gray-200 px-3 py-1 rounded-lg">
+                              <span className="font-mono font-bold text-black bg-gray-200 px-2 py-1 rounded-lg">
                                 {formatAmount(entry.debitAmount)}
                               </span>
                             ) : (
-                              <span className="text-gray-400 text-lg">-</span>
+                              <span className="text-gray-400">-</span>
                             )}
                           </td>
-                          <td className="px-6 py-4 text-center border-r border-gray-200">
+                          <td className="px-3 py-3 text-center border-r border-gray-200">
                             {editingId === entry.id && editingEntry.entryType === "credit" ? (
                               <Input
                                 type="number"
                                 step="0.01"
                                 value={editingEntry.amount}
                                 onChange={(e) => setEditingEntry({ ...editingEntry, amount: e.target.value })}
-                                className="w-full text-center text-lg font-bold border-2 border-gray-400 focus:border-black"
+                                className="w-full text-center font-bold border-2 border-gray-400 focus:border-black"
                               />
                             ) : entry.creditAmount > 0 ? (
-                              <span className="font-mono text-lg font-bold text-black bg-gray-300 px-3 py-1 rounded-lg">
+                              <span className="font-mono font-bold text-black bg-gray-300 px-2 py-1 rounded-lg">
                                 {formatAmount(entry.creditAmount)}
                               </span>
                             ) : (
-                              <span className="text-gray-400 text-lg">-</span>
+                              <span className="text-gray-400">-</span>
                             )}
                           </td>
-                          <td className="px-6 py-4 text-center">
+                          <td className="px-3 py-3 text-center">
                             {editingId === entry.id ? (
                               <div className="flex gap-2 justify-center">
                                 <Button
@@ -967,11 +902,11 @@ export default function JournalVoucher() {
 
                       {!showInlineEntry && (
                         <tr className="border-t-2 border-gray-200">
-                          <td colSpan="5" className="px-6 py-6 text-center">
+                          <td colSpan="5" className="px-4 py-4 text-center">
                             <Button
                               variant="outline"
                               onClick={() => setShowInlineEntry(true)}
-                              className="w-full py-4 text-lg font-semibold border-2 border-dashed border-gray-400 text-blue-300 hover:bg-gray-100 hover:border-blue-300 transition-all duration-200"
+                              className="w-full py-3 text-base font-semibold border-2 border-dashed border-gray-400 text-blue-300 hover:bg-gray-100 hover:border-blue-300 transition-all duration-200"
                             >
                               <Plus className="w-5 h-5 mr-3" />
                               Add New Entry
@@ -981,43 +916,43 @@ export default function JournalVoucher() {
                       )}
 
                       <tr className="border-t-4 border-blue-300 bg-gradient-to-r from-blue-300 to-blue-300 text-black font-bold">
-                        <td className="px-3 py-4 border-r border-blue-600"></td>
-                        <td className="px-6 py-4 border-r border-blue-600 text-center text-xl">TOTAL</td>
-                        <td className="px-6 py-4 text-center border-r border-blue-600">
-                          <span className="font-mono text-xl bg-text-black text-text-black px-4 py-2 rounded-lg">
+                        <td className="px-2 py-3 border-r border-blue-600"></td>
+                        <td className="px-3 py-3 border-r border-blue-600 text-center text-lg">TOTAL</td>
+                        <td className="px-3 py-3 text-center border-r border-blue-600">
+                          <span className="font-mono text-lg text-black px-3 py-1 rounded-lg">
                             {formatAmount(totalDebit)}
                           </span>
                         </td>
-                        <td className="px-6 py-4 text-center border-r border-blue-600">
-                          <span className="font-mono text-xl bg-blue-300 text-black px-4 py-2 rounded-lg">
+                        <td className="px-3 py-3 text-center border-r border-blue-600">
+                          <span className="font-mono text-lg bg-blue-300 text-black px-3 py-1 rounded-lg">
                             {formatAmount(totalCredit)}
                           </span>
                         </td>
-                        <td className="px-6 py-4"></td>
+                        <td className="px-3 py-3"></td>
                       </tr>
                     </tbody>
                   </table>
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mt-12 pt-8 border-t-2 border-gray-200">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-8 pt-4 border-t-2 border-gray-200">
                 <div className="text-center">
-                  <div className="border-t-2 border-gray-600 pt-3 mt-12">
-                    <span className="text-base font-bold text-black bg-gray-100 px-4 py-2 rounded-full">
+                  <div className="border-t-2 border-gray-600 pt-2 mt-8">
+                    <span className="text-sm font-bold text-black bg-gray-100 px-3 py-1 rounded-full">
                       Prepared By:
                     </span>
                   </div>
                 </div>
                 <div className="text-center">
-                  <div className="border-t-2 border-gray-700 pt-3 mt-12">
-                    <span className="text-base font-bold text-black bg-gray-200 px-4 py-2 rounded-full">
+                  <div className="border-t-2 border-gray-700 pt-2 mt-8">
+                    <span className="text-sm font-bold text-black bg-gray-200 px-3 py-1 rounded-full">
                       Supervised By:
                     </span>
                   </div>
                 </div>
                 <div className="text-center">
-                  <div className="border-t-2 border-gray-800 pt-3 mt-12">
-                    <span className="text-base font-bold text-black bg-gray-300 px-4 py-2 rounded-full">
+                  <div className="border-t-2 border-gray-800 pt-2 mt-8">
+                    <span className="text-sm font-bold text-black bg-gray-300 px-3 py-1 rounded-full">
                       Received By:
                     </span>
                   </div>
@@ -1027,68 +962,62 @@ export default function JournalVoucher() {
           </Card>
         </div>
 
-        {/* PRINT-ONLY AREA WITH FORMATTED PRINTOUT, INCLUDING 'CREATED BY SOFT-TECHNIX' FOOTER */}
-        <div className="print-area px-10 py-12">
-          <div className="max-w-4xl mx-auto">
-            <header className="text-center mb-6">
-              <h1 className="text-2xl font-bold text-black">demo</h1>
-              <p className="text-base text-gray-700 mt-1">Journal Voucher (GL)</p>
+        {/* PRINT-ONLY AREA (compact voucher) */}
+        <div className="print-area px-4 py-4">
+          <div className="max-w-2xl mx-auto">
+            <header className="text-center mb-3">
+              <h1 className="text-lg font-bold text-black">demo</h1>
+              <p className="text-xs text-gray-700">Journal Voucher (GL)</p>
             </header>
 
-            <section className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm mb-4">
+            <section className="grid grid-cols-2 gap-2 text-xs mb-2">
               <div>
-                <div className="font-semibold">Voucher No:</div>
-                <div>{voucherNo}</div>
+                <span className="font-semibold">Voucher No: </span>
+                {voucherNo}
               </div>
-              <div>
-                <div className="font-semibold">Date:</div>
-                <div>{formatDate(voucherDate)}</div>
+              <div className="text-right">
+                <span className="font-semibold">Date: </span>
+                {formatDate(voucherDate)}
               </div>
+            </section>
+
+            <section className="mb-3 text-xs">
+              <span className="font-semibold">Narration: </span>
+              {(narration && narration.trim()) ||
+                (entries.find((e) => (e.description || "").trim())?.description || "").trim()}
             </section>
 
             <section className="mb-4">
-              <div className="font-semibold text-sm">Narration</div>
-              <div className="text-sm">
-                {(narration && narration.trim()) ||
-                  (entries.find((e) => (e.description || "").trim())?.description || "").trim()}
-              </div>
-            </section>
-
-            <section className="mb-6">
-              <table className="w-full border-collapse">
+              <table className="w-full border-collapse text-xs">
                 <thead>
                   <tr>
-                    <th className="border border-gray-400 p-2 text-left text-sm">S.No</th>
-                    <th className="border border-gray-400 p-2 text-left text-sm">Account</th>
-                    <th className="border border-gray-400 p-2 text-left text-sm">Description</th>
-                    <th className="border border-gray-400 p-2 text-right text-sm">DR</th>
-                    <th className="border border-gray-400 p-2 text-right text-sm">CR</th>
+                    <th className="border border-gray-400 px-1.5 py-1 text-left">S.No</th>
+                    <th className="border border-gray-400 px-1.5 py-1 text-left">Account</th>
+                    <th className="border border-gray-400 px-1.5 py-1 text-right">DR</th>
+                    <th className="border border-gray-400 px-1.5 py-1 text-right">CR</th>
                   </tr>
                 </thead>
                 <tbody>
                   {entries.map((entry) => (
                     <tr key={entry.id}>
-                      <td className="border border-gray-300 p-2 align-top text-sm">{entry.serialNo}</td>
-                      <td className="border border-gray-300 p-2 align-top text-sm">{entry.account}</td>
-                      <td className="border border-gray-300 p-2 align-top text-sm">
-                        {(entry.description || "").trim() || "-"}
-                      </td>
-                      <td className="border border-gray-300 p-2 align-top text-right text-sm">
+                      <td className="border border-gray-300 px-1.5 py-1 align-top">{entry.serialNo}</td>
+                      <td className="border border-gray-300 px-1.5 py-1 align-top">{entry.account}</td>
+                      <td className="border border-gray-300 px-1.5 py-1 align-top text-right">
                         {entry.debitAmount > 0 ? formatAmount(entry.debitAmount) : "-"}
                       </td>
-                      <td className="border border-gray-300 p-2 align-top text-right text-sm">
+                      <td className="border border-gray-300 px-1.5 py-1 align-top text-right">
                         {entry.creditAmount > 0 ? formatAmount(entry.creditAmount) : "-"}
                       </td>
                     </tr>
                   ))}
                   <tr>
-                    <td className="border border-gray-400 p-2 font-semibold text-sm" colSpan={3}>
+                    <td className="border border-gray-400 px-1.5 py-1 font-semibold" colSpan={2}>
                       Total
                     </td>
-                    <td className="border border-gray-400 p-2 text-right font-semibold text-sm">
+                    <td className="border border-gray-400 px-1.5 py-1 text-right font-semibold">
                       {formatAmount(totalDebit)}
                     </td>
-                    <td className="border border-gray-400 p-2 text-right font-semibold text-sm">
+                    <td className="border border-gray-400 px-1.5 py-1 text-right font-semibold">
                       {formatAmount(totalCredit)}
                     </td>
                   </tr>
@@ -1096,29 +1025,16 @@ export default function JournalVoucher() {
               </table>
             </section>
 
-            <section className="grid grid-cols-1 md:grid-cols-3 gap-8 mt-12">
-              <div className="text-center">
-                <div className="border-t border-gray-600 pt-3">
-                  <span className="text-sm font-semibold text-black">Prepared By</span>
-                </div>
-              </div>
-              <div className="text-center">
-                <div className="border-t border-gray-700 pt-3">
-                  <span className="text-sm font-semibold text-black">Supervised By</span>
-                </div>
-              </div>
-              <div className="text-center">
-                <div className="border-t border-gray-800 pt-3">
-                  <span className="text-sm font-semibold text-black">Received By</span>
-                </div>
-              </div>
+            <section className="grid grid-cols-3 gap-4 mt-8 text-xs">
+              <div className="text-center border-t border-gray-600 pt-1 font-semibold">Prepared By</div>
+              <div className="text-center border-t border-gray-600 pt-1 font-semibold">Supervised By</div>
+              <div className="text-center border-t border-gray-600 pt-1 font-semibold">Received By</div>
             </section>
           </div>
 
-          <div className="print-footer text-xs text-gray-700 mt-8">Created by Soft-Technix</div>
+          <div className="print-footer text-[10px] text-gray-700 mt-4">Created by Soft-Technix</div>
         </div>
 
-        {/* PRINT STYLES: HIDE INTERACTIVE UI, SHOW PRINT LAYOUT, AND ENSURE COLORS RENDER */}
         <style jsx>{`
           .print-area {
             display: none;
@@ -1136,7 +1052,7 @@ export default function JournalVoucher() {
             }
             .print-footer {
               position: fixed;
-              bottom: 16px;
+              bottom: 8px;
               left: 0;
               right: 0;
               text-align: center;
@@ -1145,24 +1061,17 @@ export default function JournalVoucher() {
         `}</style>
       </div>
 
-      {/* ADDED GLOBAL OVERRIDES:
-      - show print-area on screen when in .print-preview
-      - during print: hide everything except .print-area
-      - remove pictures entirely (logos/images) in preview and print */}
       <style jsx global>{`
         @media screen {
-          /* Hide print layout by default on screen */
           .print-area {
             display: none;
           }
-          /* In preview mode, hide interactive UI and show the voucher block */
           .print-preview .no-print {
             display: none !important;
           }
           .print-preview .print-area {
             display: block !important;
           }
-          /* Remove any images while previewing */
           .print-preview img,
           .print-area img {
             display: none !important;
@@ -1170,7 +1079,10 @@ export default function JournalVoucher() {
         }
 
         @media print {
-          /* Ensure only the voucher prints */
+          @page {
+            size: A5;
+            margin: 8mm;
+          }
           body * {
             visibility: hidden !important;
           }
@@ -1184,11 +1096,9 @@ export default function JournalVoucher() {
             top: 0;
             width: 100%;
           }
-          /* Remove all pictures/logos from print */
           img {
             display: none !important;
           }
-          /* Preserve colors when printing */
           body {
             -webkit-print-color-adjust: exact;
             print-color-adjust: exact;
