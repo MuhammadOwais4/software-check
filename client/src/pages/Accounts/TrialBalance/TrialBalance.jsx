@@ -382,7 +382,7 @@ export default function TrialBalanceIntegrated() {
           </div>
 
           <div className="text-center mb-4 print-header">
-            <h1 className="text-3xl font-bold text-gray-800">Denim Locker</h1>
+            <h1 className="text-3xl font-bold text-gray-800">demo</h1>
             <h2 className="text-2xl font-semibold text-blue-600 mt-2">TRIAL BALANCE</h2>
             <p className="text-sm text-gray-600 mt-2">(Integrated with General Ledger)</p>
           </div>
