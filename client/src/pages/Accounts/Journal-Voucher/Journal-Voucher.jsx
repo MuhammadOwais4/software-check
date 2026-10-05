@@ -29,7 +29,6 @@ const newRow = () => ({
   chequeNo: "",
   chequeDate: "",
   remarks: "",
-  auto: false, // true => amount was auto-filled to balance the voucher
 })
 
 const initialRows = () => [newRow(), newRow()]
@@ -45,33 +44,6 @@ const generateUniqueVoucherNo = () => {
 const toCents = (v) => Math.round((Number.parseFloat(v) || 0) * 100)
 
 const hasAmount = (r) => toCents(r.debit) > 0 || toCents(r.credit) > 0
-
-// Keeps the "auto" row (the one that balances the voucher) in sync with the other rows.
-// Picks the existing auto row, else the last row that has no amount yet (e.g. the 2nd row on first open).
-const rebalance = (list, editedId) => {
-  let idx = -1
-  for (let i = list.length - 1; i >= 0; i--) {
-    if (list[i].auto && list[i].id !== editedId) {
-      idx = i
-      break
-    }
-  }
-  if (idx === -1) {
-    for (let i = list.length - 1; i >= 0; i--) {
-      if (list[i].id !== editedId && !hasAmount(list[i])) {
-        idx = i
-        break
-      }
-    }
-  }
-  if (idx === -1) return list
-
-  const diff = list.reduce((sum, r, i) => (i === idx ? sum : sum + toCents(r.debit) - toCents(r.credit)), 0)
-  const target = { ...list[idx], auto: true, debit: "", credit: "" }
-  if (diff > 0) target.credit = (diff / 100).toString()
-  else if (diff < 0) target.debit = (Math.abs(diff) / 100).toString()
-  return list.map((r, i) => (i === idx ? target : r))
-}
 
 /* ---------- Account code search cell (code input + dropdown) ---------- */
 function AccountCodeCell({ value, accounts, onSelect, focusSignal = 0 }) {
@@ -302,59 +274,40 @@ export default function JournalVoucher() {
 
   const selectAccount = (id, acc) => updateRow(id, { accountCode: String(acc.code), accountName: acc.name })
 
-  // Typing in one side clears the other side of the same row; the auto row re-balances itself
-  const setAmount = (id, side, value) =>
-    setRows((prev) => {
-      const other = side === "debit" ? "credit" : "debit"
-      const next = prev.map((r) =>
-        r.id === id ? { ...r, [side]: value, ...(value ? { [other]: "" } : {}), auto: false } : r,
-      )
-      return rebalance(next, id)
-    })
+  // Typing in one side clears the other side of the same row. Amounts are always typed by the user.
+  const setAmount = (id, side, value) => {
+    const other = side === "debit" ? "credit" : "debit"
+    updateRow(id, value ? { [side]: value, [other]: "" } : { [side]: "" })
+  }
   const setDebit = (id, value) => setAmount(id, "debit", value)
   const setCredit = (id, value) => setAmount(id, "credit", value)
 
-  // Add More: puts the missing difference on the opposite side so the voucher becomes equal.
-  // Re-uses an empty row instead of adding a blank one in between, then focuses its account cell.
+  // Add More: adds a BLANK row (re-uses an empty one if it exists) and opens its Account Code
+  // dropdown. No amount is filled in - the user types his own amount; the remaining
+  // amount is only shown as a hint in the field.
   const addRow = () => {
-    const d = rows.reduce((sum, r) => sum + toCents(r.debit) - toCents(r.credit), 0)
-    const fill = (r) => ({
-      ...r,
-      auto: true,
-      debit: d < 0 ? (Math.abs(d) / 100).toString() : "",
-      credit: d > 0 ? (d / 100).toString() : "",
-    })
-
-    let targetId
-    let next
-    if (d === 0) {
-      const blank = newRow() // already equal -> plain blank row
-      targetId = blank.id
-      next = [...rows, blank]
-    } else {
-      let emptyIdx = -1
-      for (let i = rows.length - 1; i >= 0; i--) {
-        if (!hasAmount(rows[i])) {
-          emptyIdx = i
-          break
-        }
-      }
-      if (emptyIdx !== -1) {
-        targetId = rows[emptyIdx].id
-        next = rows.map((r, i) => (i === emptyIdx ? fill(r) : r))
-      } else {
-        const added = fill(newRow())
-        targetId = added.id
-        next = [...rows, added]
+    let emptyIdx = -1
+    for (let i = rows.length - 1; i >= 0; i--) {
+      const r = rows[i]
+      if (!r.accountCode && !hasAmount(r)) {
+        emptyIdx = i
+        break
       }
     }
-    setRows(next)
+    let targetId
+    if (emptyIdx !== -1) {
+      targetId = rows[emptyIdx].id
+    } else {
+      const blank = newRow()
+      targetId = blank.id
+      setRows((prev) => [...prev, blank])
+    }
     setFocusReq((f) => ({ id: targetId, n: f.n + 1 }))
   }
 
   const removeRow = (id) => {
     if (rows.length <= 2) return
-    setRows((prev) => rebalance(prev.filter((r) => r.id !== id), null))
+    setRows((prev) => prev.filter((r) => r.id !== id))
   }
 
   const resetForm = () => {
@@ -384,7 +337,6 @@ export default function JournalVoucher() {
         chequeNo: e.chequeNo || "",
         chequeDate: e.chequeDate ? String(e.chequeDate).split("T")[0] : "",
         remarks: e.description || "",
-        auto: false,
       }
     })
     setRows(loaded.length >= 2 ? loaded : [...loaded, ...initialRows().slice(loaded.length)])
@@ -522,6 +474,11 @@ export default function JournalVoucher() {
     if (!isFinite(num)) return "0"
     return new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }).format(num)
   }
+
+  // Remaining amount hint: shown only as a placeholder on the side that is still short
+  const remainingText = diffCents !== 0 ? formatAmount(Math.abs(diffCents) / 100) : ""
+  const debitHint = diffCents < 0 ? remainingText : ""
+  const creditHint = diffCents > 0 ? remainingText : ""
 
   const printRows = rows.filter((r) => r.accountCode || r.debit || r.credit)
 
@@ -710,6 +667,8 @@ export default function JournalVoucher() {
                             min="0"
                             value={r.debit}
                             onChange={(e) => setDebit(r.id, e.target.value)}
+                            placeholder={!hasAmount(r) ? debitHint : ""}
+                            title={!hasAmount(r) && debitHint ? `Baqi: ${debitHint}` : undefined}
                             className="h-9 text-sm text-right border-gray-300"
                           />
                         </td>
@@ -720,6 +679,8 @@ export default function JournalVoucher() {
                             min="0"
                             value={r.credit}
                             onChange={(e) => setCredit(r.id, e.target.value)}
+                            placeholder={!hasAmount(r) ? creditHint : ""}
+                            title={!hasAmount(r) && creditHint ? `Baqi: ${creditHint}` : undefined}
                             className="h-9 text-sm text-right border-gray-300"
                           />
                         </td>
