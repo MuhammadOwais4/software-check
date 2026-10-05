@@ -4,8 +4,6 @@ import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import {
   AlertDialog,
@@ -17,10 +15,22 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { Trash2, Edit3, Plus, Save, X, Check } from "lucide-react"
+import { Trash2, Edit3, Plus, X, Check, Search, AlertTriangle } from "lucide-react"
 import ApiHandler from "@/Api/apihandle"
 
-const emptyInline = { debitAccount: "", creditAccount: "", amount: "", step: "debit", narration: "" }
+const newRow = () => ({
+  id: `row-${Date.now()}-${Math.floor(Math.random() * 1000000)}`,
+  accountCode: "",
+  accountName: "",
+  billReference: "",
+  debit: "",
+  credit: "",
+  chequeNo: "",
+  chequeDate: "",
+  remarks: "",
+})
+
+const initialRows = () => [newRow(), newRow()]
 
 const generateUniqueVoucherNo = () => {
   const timestamp = Date.now()
@@ -30,21 +40,75 @@ const generateUniqueVoucherNo = () => {
   return `JV-${timestamp}-${random}`
 }
 
+const toCents = (v) => Math.round((Number.parseFloat(v) || 0) * 100)
+
+/* ---------- Account code search cell (code input + dropdown) ---------- */
+function AccountCodeCell({ value, accounts, onSelect }) {
+  const [open, setOpen] = useState(false)
+  const [query, setQuery] = useState(value || "")
+
+  useEffect(() => {
+    setQuery(value || "")
+  }, [value])
+
+  const q = query.trim().toLowerCase()
+  const filtered = accounts
+    .filter((a) => `${a.code} ${a.name}`.toLowerCase().includes(q))
+    .slice(0, 50)
+
+  const handleBlur = () => {
+    setTimeout(() => {
+      setOpen(false)
+      const exact = accounts.find((a) => String(a.code).toLowerCase() === q)
+      if (exact) onSelect(exact)
+      else setQuery(value || "")
+    }, 150)
+  }
+
+  return (
+    <div className="relative">
+      <Input
+        value={query}
+        onChange={(e) => {
+          setQuery(e.target.value)
+          setOpen(true)
+        }}
+        onFocus={() => setOpen(true)}
+        onBlur={handleBlur}
+        placeholder="Code / name"
+        className="pr-8 h-9 text-sm border-gray-300"
+      />
+      <Search className="w-4 h-4 absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none" />
+      {open && (
+        <div className="absolute z-50 mt-1 w-72 max-h-60 overflow-y-auto bg-white border border-gray-300 rounded-md shadow-lg">
+          {filtered.length === 0 ? (
+            <div className="px-3 py-2 text-sm text-gray-500">No account found</div>
+          ) : (
+            filtered.map((a) => (
+              <div
+                key={a.value}
+                onMouseDown={(e) => {
+                  e.preventDefault()
+                  onSelect(a)
+                  setOpen(false)
+                }}
+                className="px-3 py-1.5 text-sm cursor-pointer hover:bg-blue-50 flex justify-between gap-2"
+              >
+                <span className="font-mono">{a.code}</span>
+                <span className="truncate text-gray-700">{a.name}</span>
+              </div>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function JournalVoucher() {
   const [voucherNo, setVoucherNo] = useState("")
   const [voucherDate, setVoucherDate] = useState("")
-  const [narration, setNarration] = useState("")
-  const [entries, setEntries] = useState([])
-  const [editingId, setEditingId] = useState(null)
-  const [editingEntry, setEditingEntry] = useState({
-    account: "",
-    amount: "",
-    entryType: "debit",
-    description: "",
-  })
-  const [serialCounter, setSerialCounter] = useState(1)
-  const [inlineEntry, setInlineEntry] = useState(emptyInline)
-  const [showInlineEntry, setShowInlineEntry] = useState(false)
+  const [rows, setRows] = useState(initialRows())
   const [accountOptions, setAccountOptions] = useState([])
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -59,7 +123,18 @@ export default function JournalVoucher() {
   const [deleting, setDeleting] = useState(false)
   const [showPrintPreview, setShowPrintPreview] = useState(false)
 
+  /* ---------- Totals & balance rule ---------- */
+  const totalDebit = rows.reduce((s, r) => s + (Number.parseFloat(r.debit) || 0), 0)
+  const totalCredit = rows.reduce((s, r) => s + (Number.parseFloat(r.credit) || 0), 0)
+  const diffCents = toCents(totalDebit) - toCents(totalCredit)
+  const isBalanced = diffCents === 0 && toCents(totalDebit) > 0
+
+  /* ---------- Print ---------- */
   const handlePrint = () => {
+    if (!isBalanced) {
+      alert("Total Debit aur Total Credit equal hona zaroori hai.")
+      return
+    }
     setShowPrintPreview(true)
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
@@ -74,11 +149,10 @@ export default function JournalVoucher() {
     return () => window.removeEventListener("afterprint", onAfterPrint)
   }, [])
 
+  /* ---------- Initial load ---------- */
   useEffect(() => {
-    const today = new Date().toISOString().split("T")[0]
     setVoucherNo(generateUniqueVoucherNo())
-    setVoucherDate(today)
-
+    setVoucherDate(new Date().toISOString().split("T")[0])
     loadAllAccounts()
     loadAllVouchers()
   }, [])
@@ -86,7 +160,6 @@ export default function JournalVoucher() {
   const loadAllAccounts = async () => {
     try {
       setLoading(true)
-
       const [assetsRes, equityRes, expensesRes, liabilitiesRes, revenueRes] = await Promise.all([
         ApiHandler.getAssets().catch(() => ({ data: [] })),
         ApiHandler.getEquity().catch(() => ({ data: [] })),
@@ -95,41 +168,22 @@ export default function JournalVoucher() {
         ApiHandler.getRevenue().catch(() => ({ data: [] })),
       ])
 
-      const allAccounts = [
-        ...(assetsRes.data || []).map((account) => ({
+      const mapAcc = (list, category) =>
+        (list.data || []).map((account) => ({
           value: `${account.code} - ${account.name}`,
-          label: `${account.code} - ${account.name} (Asset)`,
-          category: "Assets",
+          category,
           ...account,
-        })),
-        ...(equityRes.data || []).map((account) => ({
-          value: `${account.code} - ${account.name}`,
-          label: `${account.code} - ${account.name} (Equity)`,
-          category: "Equity",
-          ...account,
-        })),
-        ...(expensesRes.data || []).map((account) => ({
-          value: `${account.code} - ${account.name}`,
-          label: `${account.code} - ${account.name} (Expense)`,
-          category: "Expenses",
-          ...account,
-        })),
-        ...(liabilitiesRes.data || []).map((account) => ({
-          value: `${account.code} - ${account.name}`,
-          label: `${account.code} - ${account.name} (Liability)`,
-          category: "Liabilities",
-          ...account,
-        })),
-        ...(revenueRes.data || []).map((account) => ({
-          value: `${account.code} - ${account.name}`,
-          label: `${account.code} - ${account.name} (Revenue)`,
-          category: "Revenue",
-          ...account,
-        })),
-      ]
+        }))
 
-      allAccounts.sort((a, b) => a.code.localeCompare(b.code))
-      setAccountOptions(allAccounts)
+      const all = [
+        ...mapAcc(assetsRes, "Assets"),
+        ...mapAcc(equityRes, "Equity"),
+        ...mapAcc(expensesRes, "Expenses"),
+        ...mapAcc(liabilitiesRes, "Liabilities"),
+        ...mapAcc(revenueRes, "Revenue"),
+      ]
+      all.sort((a, b) => String(a.code).localeCompare(String(b.code)))
+      setAccountOptions(all)
     } catch (error) {
       console.error("Error loading accounts:", error)
     } finally {
@@ -141,8 +195,7 @@ export default function JournalVoucher() {
     try {
       setLoadingVouchers(true)
       const response = await ApiHandler.getVouchers()
-      const JVVouchers = (response.data || []).filter((v) => v.voucherType === "JV")
-      setAllVouchers(JVVouchers)
+      setAllVouchers((response.data || []).filter((v) => v.voucherType === "JV"))
     } catch (error) {
       console.error("Error loading vouchers:", error)
       setAllVouchers([])
@@ -151,40 +204,59 @@ export default function JournalVoucher() {
     }
   }
 
+  /* ---------- Row helpers ---------- */
+  const updateRow = (id, patch) => setRows((prev) => prev.map((r) => (r.id === id ? { ...r, ...patch } : r)))
+
+  const selectAccount = (id, acc) => updateRow(id, { accountCode: String(acc.code), accountName: acc.name })
+
+  // Typing in one side clears the other side of the same row
+  const setDebit = (id, value) => updateRow(id, value ? { debit: value, credit: "" } : { debit: "" })
+  const setCredit = (id, value) => updateRow(id, value ? { credit: value, debit: "" } : { credit: "" })
+
+  // New row: pre-fill the difference on the opposite side so voucher balances quickly
+  const addRow = () => {
+    const r = newRow()
+    if (diffCents > 0) r.credit = (diffCents / 100).toString()
+    else if (diffCents < 0) r.debit = (Math.abs(diffCents) / 100).toString()
+    setRows((prev) => [...prev, r])
+  }
+
+  const removeRow = (id) => {
+    if (rows.length <= 2) return
+    setRows((prev) => prev.filter((r) => r.id !== id))
+  }
+
+  const resetForm = () => {
+    setRows(initialRows())
+    setVoucherNo(generateUniqueVoucherNo())
+    setVoucherDate(new Date().toISOString().split("T")[0])
+    setIsEditMode(false)
+    setEditingVoucherId(null)
+  }
+
+  /* ---------- Edit / delete ---------- */
   const loadVoucherForEdit = (voucher) => {
     setIsEditMode(true)
     setEditingVoucherId(voucher._id)
     setVoucherNo(voucher.voucherNo)
     setVoucherDate(new Date(voucher.voucherDate).toISOString().split("T")[0])
-    setNarration(voucher.narration || "")
 
-    const entriesWithIds = (voucher.entries || []).map((entry, index) => {
-      if (!entry.id) {
-        return {
-          ...entry,
-          id: entry._id || `loaded-${Date.now()}-${index}-${Math.floor(Math.random() * 1000000)}`,
-        }
+    const loaded = (voucher.entries || []).map((e, i) => {
+      const [code, ...rest] = (e.account || "").split(" - ")
+      return {
+        id: e.id || e._id || `loaded-${Date.now()}-${i}-${Math.floor(Math.random() * 1000000)}`,
+        accountCode: code || "",
+        accountName: rest.join(" - "),
+        billReference: e.billReference || "",
+        debit: e.debitAmount > 0 ? String(e.debitAmount) : "",
+        credit: e.creditAmount > 0 ? String(e.creditAmount) : "",
+        chequeNo: e.chequeNo || "",
+        chequeDate: e.chequeDate ? String(e.chequeDate).split("T")[0] : "",
+        remarks: e.description || "",
       }
-      return entry
     })
-
-    setEntries(entriesWithIds)
-    const maxSerial = Math.max(0, ...entriesWithIds.map((e) => e.serialNo || 0))
-    setSerialCounter(maxSerial + 1)
+    setRows(loaded.length >= 2 ? loaded : [...loaded, ...initialRows().slice(loaded.length)])
     setShowVoucherList(false)
-  }
-
-  const cancelEditMode = () => {
-    setIsEditMode(false)
-    setEditingVoucherId(null)
-    setVoucherNo(generateUniqueVoucherNo())
-    setVoucherDate(new Date().toISOString().split("T")[0])
-    setNarration("")
-    setEntries([])
-    setSerialCounter(1)
-    setEditingId(null)
-    setEditingEntry({ account: "", amount: "", entryType: "debit", description: "" })
-    setInlineEntry(emptyInline)
   }
 
   const openDeleteDialog = (voucher) => {
@@ -199,16 +271,11 @@ export default function JournalVoucher() {
 
   const handleDeleteVoucher = async () => {
     if (!voucherToDelete) return
-
     try {
       setDeleting(true)
       await ApiHandler.deleteVoucher(voucherToDelete._id)
       await loadAllVouchers()
-
-      if (editingVoucherId === voucherToDelete._id) {
-        cancelEditMode()
-      }
-
+      if (editingVoucherId === voucherToDelete._id) resetForm()
       setDeleteDialogOpen(false)
       setVoucherToDelete(null)
     } catch (error) {
@@ -219,201 +286,102 @@ export default function JournalVoucher() {
     }
   }
 
+  /* ---------- Save (with validations) ---------- */
+  const validate = () => {
+    const used = rows.filter((r) => r.accountCode || r.debit || r.credit)
+    if (used.length < 2) return "Kam az kam 2 entries honi chahiye."
+
+    for (let i = 0; i < used.length; i++) {
+      const r = used[i]
+      const n = i + 1
+      if (!r.accountCode || !r.accountName) return `Row ${n}: Account select karo.`
+      const hasDr = toCents(r.debit) > 0
+      const hasCr = toCents(r.credit) > 0
+      if (!hasDr && !hasCr) return `Row ${n}: Debit ya Credit amount daalo.`
+      if (hasDr && hasCr) return `Row ${n}: Debit aur Credit dono ek saath nahi ho sakte.`
+    }
+
+    if (toCents(totalDebit) !== toCents(totalCredit)) {
+      return `Total Debit (${formatAmount(totalDebit)}) aur Total Credit (${formatAmount(totalCredit)}) equal nahi hain. Difference: ${formatAmount(Math.abs(diffCents) / 100)}`
+    }
+    return null
+  }
+
   const saveVoucher = async () => {
-    if (entries.length === 0) {
-      alert("Please add at least one entry before saving.")
+    const error = validate()
+    if (error) {
+      alert(error)
       return
     }
 
-    const derivedNarration =
-      (narration && narration.trim()) || (entries.find((e) => (e.description || "").trim())?.description || "").trim()
+    const used = rows.filter((r) => r.accountCode || r.debit || r.credit)
+    const entries = used.map((r, i) => {
+      const isDebit = toCents(r.debit) > 0
+      return {
+        id: r.id,
+        serialNo: i + 1,
+        account: `${r.accountCode} - ${r.accountName}`,
+        debitAmount: isDebit ? Number.parseFloat(r.debit) : 0,
+        creditAmount: isDebit ? 0 : Number.parseFloat(r.credit),
+        entryType: isDebit ? "debit" : "credit",
+        description: (r.remarks || "").trim(),
+        billReference: r.billReference,
+        chequeNo: r.chequeNo,
+        chequeDate: r.chequeDate || null,
+      }
+    })
 
-    if (!derivedNarration) {
-      alert("Please enter a narration before saving.")
-      return
-    }
+    const narration = (entries.find((e) => e.description)?.description || "Journal Voucher").trim()
 
     try {
       setSaving(true)
-
       const voucherData = {
-        voucherNo: voucherNo,
+        voucherNo,
         voucherType: "JV",
         voucherDate: new Date(voucherDate),
-        narration: derivedNarration,
+        narration,
         entries,
       }
 
-      let response
-
       if (isEditMode && editingVoucherId) {
-        response = await ApiHandler.updateVoucher(editingVoucherId, voucherData)
+        await ApiHandler.updateVoucher(editingVoucherId, voucherData)
       } else {
         voucherData.voucherNo = generateUniqueVoucherNo()
-
-        let saveAttempts = 0
-        let saveSuccessful = false
-
-        while (!saveSuccessful && saveAttempts < 5) {
+        let attempts = 0
+        let ok = false
+        while (!ok && attempts < 5) {
           try {
-            response = await ApiHandler.createVoucher(voucherData)
-            saveSuccessful = true
-          } catch (error) {
-            if (error.message.includes("already exists") && saveAttempts < 4) {
+            await ApiHandler.createVoucher(voucherData)
+            ok = true
+          } catch (err) {
+            if (err.message.includes("already exists") && attempts < 4) {
               voucherData.voucherNo = generateUniqueVoucherNo()
-              setVoucherNo(voucherData.voucherNo)
-              saveAttempts++
+              attempts++
             } else {
-              throw error
+              throw err
             }
           }
         }
-
-        if (!saveSuccessful) {
-          throw new Error("Failed to generate unique voucher number after multiple attempts")
-        }
+        if (!ok) throw new Error("Failed to generate unique voucher number after multiple attempts")
       }
 
-      setVoucherNo(voucherData.voucherNo)
       setSaveSuccess(true)
       setTimeout(() => setSaveSuccess(false), 3000)
-
-      setEntries([])
-      setNarration("")
-      setInlineEntry(emptyInline)
-      setSerialCounter(1)
-      setIsEditMode(false)
-      setEditingVoucherId(null)
-      setVoucherNo(generateUniqueVoucherNo())
-
+      resetForm()
       await loadAllVouchers()
-    } catch (error) {
-      console.error("Error saving voucher:", error)
-      alert(`Failed to save voucher: ${error.response?.data?.message || error.message}`)
+    } catch (err) {
+      console.error("Error saving voucher:", err)
+      alert(`Failed to save voucher: ${err.response?.data?.message || err.message}`)
     } finally {
       setSaving(false)
     }
   }
 
-  const totalCredit = entries.reduce((sum, entry) => sum + (entry.creditAmount || 0), 0)
-  const totalDebit = entries.reduce((sum, entry) => sum + (entry.debitAmount || 0), 0)
-
-  const handleNarrationKeyDown = (e) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault()
-      if (inlineEntry.step === "debit" && inlineEntry.debitAccount) {
-        setInlineEntry({ ...inlineEntry, step: "amount" })
-      }
-    }
-  }
-
-  const handleInlineEntrySubmit = () => {
-    if (!inlineEntry.debitAccount || !inlineEntry.creditAccount || !inlineEntry.amount) return
-
-    const amount = Number.parseFloat(inlineEntry.amount) || 0
-    const currentSerial = serialCounter
-    const description = (inlineEntry.narration || narration || "").trim()
-
-    const timestamp = Date.now()
-    const randomDebit = Math.floor(Math.random() * 1000000)
-    const randomCredit = Math.floor(Math.random() * 1000000)
-
-    const debitEntry = {
-      id: `debit-${timestamp}-${randomDebit}`,
-      serialNo: currentSerial,
-      account: inlineEntry.debitAccount,
-      debitAmount: amount,
-      creditAmount: 0,
-      entryType: "debit",
-      description: description,
-      pairId: currentSerial,
-    }
-
-    const creditEntry = {
-      id: `credit-${timestamp}-${randomCredit}`,
-      serialNo: currentSerial,
-      account: inlineEntry.creditAccount,
-      debitAmount: 0,
-      creditAmount: amount,
-      entryType: "credit",
-      description: description,
-      pairId: currentSerial,
-    }
-
-    if (description) setNarration(description)
-
-    setEntries([...entries, debitEntry, creditEntry])
-    setInlineEntry(emptyInline)
-    setSerialCounter(serialCounter + 1)
-    setShowInlineEntry(false)
-  }
-
-  const handleKeyPress = (e, action) => {
-    if (e.key === "Enter") {
-      if (action === "debit" && inlineEntry.debitAccount) {
-        setInlineEntry({ ...inlineEntry, step: "amount" })
-      } else if (action === "amount" && inlineEntry.amount) {
-        setInlineEntry({ ...inlineEntry, step: "credit" })
-      } else if (action === "credit" && inlineEntry.creditAccount) {
-        handleInlineEntrySubmit()
-      }
-    }
-  }
-
-  const deleteEntry = (entryIdToDelete) => {
-    setEntries(entries.filter((entry) => entry.id !== entryIdToDelete))
-  }
-
-  const startEdit = (entry) => {
-    setEditingId(entry.id)
-    setEditingEntry({
-      account: entry.account,
-      amount: (entry.debitAmount || entry.creditAmount).toString(),
-      entryType: entry.entryType,
-      description: entry.description || "",
-    })
-  }
-
-  const saveEdit = () => {
-    if (!editingId) return
-
-    setEntries(
-      entries.map((entry) =>
-        entry.id === editingId
-          ? {
-              ...entry,
-              account: editingEntry.account,
-              debitAmount: editingEntry.entryType === "debit" ? Number.parseFloat(editingEntry.amount) || 0 : 0,
-              creditAmount: editingEntry.entryType === "credit" ? Number.parseFloat(editingEntry.amount) || 0 : 0,
-              entryType: editingEntry.entryType,
-              description: editingEntry.description,
-            }
-          : entry,
-      ),
-    )
-    setEditingId(null)
-    setEditingEntry({ account: "", amount: "", entryType: "debit", description: "" })
-  }
-
-  const cancelEdit = () => {
-    setEditingId(null)
-    setEditingEntry({ account: "", amount: "", entryType: "debit", description: "" })
-  }
-
-  const cancelInlineEntry = () => {
-    setInlineEntry(emptyInline)
-    setShowInlineEntry(false)
-  }
-
+  /* ---------- Formatting ---------- */
   const formatDate = (dateString) => {
     if (!dateString) return ""
-    const date = new Date(dateString)
-    return date
-      .toLocaleDateString("en-GB", {
-        day: "2-digit",
-        month: "2-digit",
-        year: "numeric",
-      })
+    return new Date(dateString)
+      .toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric" })
       .replace(/\//g, ".")
   }
 
@@ -423,36 +391,14 @@ export default function JournalVoucher() {
     return new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }).format(num)
   }
 
-  const groupedAccounts = accountOptions.reduce((groups, account) => {
-    const category = account.category
-    if (!groups[category]) {
-      groups[category] = []
-    }
-    groups[category].push(account)
-    return groups
-  }, {})
-
-  // Shared dropdown items (useLabel = show full label, else just name)
-  const renderAccountItems = (useLabel = false) =>
-    Object.entries(groupedAccounts).map(([category, accounts]) => (
-      <div key={category}>
-        <div className="px-2 py-1 text-sm text-blue-800 bg-gray-100 font-bold">{category}</div>
-        {accounts.map((account) => (
-          <SelectItem key={account.value} value={account.value} className="text-sm pl-4">
-            {useLabel ? account.label : account.name}
-          </SelectItem>
-        ))}
-      </div>
-    ))
-
-  const inlineAmountNumber = Number.parseFloat(inlineEntry.amount) || 0
+  const printRows = rows.filter((r) => r.accountCode || r.debit || r.credit)
 
   return (
     <div className={showPrintPreview ? "print-preview" : ""}>
       <div className="min-h-screen bg-gradient-to-br from-gray-50 via-slate-50 to-zinc-50 p-4">
         <div className="no-print">
-          <Card className="w-full max-w-4xl mx-auto shadow-xl border-0 overflow-hidden">
-            <CardHeader className="text-center border-b-0 bg-gradient-to-r from-blue-300 via-blue-300 to-blue-300 text-black py-4">
+          <Card className="w-full max-w-6xl mx-auto shadow-xl border-0 overflow-hidden">
+            <CardHeader className="text-center bg-blue-300 text-black py-4">
               <div className="flex items-center justify-between mb-2">
                 <div className="flex gap-2">
                   <Button
@@ -466,7 +412,7 @@ export default function JournalVoucher() {
                   {isEditMode && (
                     <Button
                       variant="outline"
-                      onClick={cancelEditMode}
+                      onClick={resetForm}
                       className="bg-white/20 border-white/30 text-black hover:bg-white/30"
                     >
                       <X className="w-4 h-4 mr-2" />
@@ -475,40 +421,14 @@ export default function JournalVoucher() {
                   )}
                 </div>
               </div>
-              <div className="text-base font-semibold mb-1 opacity-90">demo</div>
+              <div className="text-base font-semibold opacity-90">demo</div>
               <CardTitle className="text-2xl font-bold tracking-wide">
                 Journal Voucher GL {isEditMode && <span className="text-sm">(Editing)</span>}
               </CardTitle>
-              <div className="w-20 h-1 bg-white/30 mx-auto mt-2 rounded-full"></div>
             </CardHeader>
 
             <CardContent className="p-4 bg-white">
-              <div className="mb-4 flex justify-end">
-                <div className="flex items-center gap-3">
-                  {saveSuccess && (
-                    <div className="flex items-center gap-2 bg-green-500 text-white px-3 py-1 rounded-full text-sm">
-                      <Check className="w-4 h-4" />
-                      Saved Successfully
-                    </div>
-                  )}
-                  <Button
-                    onClick={handlePrint}
-                    variant="outline"
-                    className="border-gray-400 text-black hover:bg-gray-100 bg-transparent"
-                    title="Print the voucher"
-                  >
-                    Print
-                  </Button>
-                  <Button
-                    onClick={saveVoucher}
-                    disabled={saving || entries.length === 0}
-                    className="bg-black text-white hover:bg-gray-800"
-                  >
-                    {saving ? "Saving..." : isEditMode ? "Update Voucher" : "Save Voucher"}
-                  </Button>
-                </div>
-              </div>
-
+              {/* Voucher list */}
               {showVoucherList && (
                 <div className="mb-6 border-2 border-gray-300 rounded-lg p-4 bg-gray-50">
                   <div className="flex justify-between items-center mb-4">
@@ -566,23 +486,22 @@ export default function JournalVoucher() {
                 </div>
               )}
 
+              {/* Voucher no + date */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                 <div className="space-y-2">
-                  <Label htmlFor="voucher-no" className="text-base font-semibold text-blue-300 flex items-center gap-2">
-                    <div className="w-2 h-2 bg-blue-300 rounded-full"></div>
+                  <Label htmlFor="voucher-no" className="text-sm font-semibold text-gray-700">
                     GL No.
                   </Label>
                   <Input
                     id="voucher-no"
                     value={voucherNo}
                     onChange={(e) => setVoucherNo(e.target.value)}
-                    className="font-mono text-base border-2 border-gray-300 focus:border-blue-300 transition-colors"
+                    className="font-mono border-gray-300"
                     disabled={isEditMode}
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="voucher-date" className="text-base font-semibold text-blue-300 flex items-center gap-2">
-                    <div className="w-2 h-2 bg-blue-300 rounded-full"></div>
+                  <Label htmlFor="voucher-date" className="text-sm font-semibold text-gray-700">
                     Date
                   </Label>
                   <Input
@@ -590,27 +509,9 @@ export default function JournalVoucher() {
                     type="date"
                     value={voucherDate}
                     onChange={(e) => setVoucherDate(e.target.value)}
-                    className="text-base border-2 border-gray-300 focus:border-black transition-colors"
+                    className="border-gray-300"
                   />
-                  <div className="text-xs text-gray-800 font-medium bg-gray-100 px-3 py-1 rounded-full inline-block">
-                    Display: {formatDate(voucherDate)}
-                  </div>
                 </div>
-              </div>
-
-              <div className="mb-4 hidden">
-                <Label htmlFor="narration" className="text-base font-semibold text-blue-300 flex items-center gap-2 mb-2">
-                  <div className="w-2 h-2 bg-blue-300 rounded-full"></div>
-                  Narration
-                </Label>
-                <Textarea
-                  id="narration"
-                  value={narration}
-                  onChange={(e) => setNarration(e.target.value)}
-                  placeholder="Enter narration details..."
-                  className="border-2 border-gray-300 focus:border-black transition-colors text-sm"
-                  rows={3}
-                />
               </div>
 
               <div className="mb-3 flex justify-between items-center">
@@ -625,352 +526,188 @@ export default function JournalVoucher() {
                 <div className="text-sm text-gray-600">Total Accounts Available: {accountOptions.length}</div>
               </div>
 
-              <div className="border-2 border-gray-200 rounded-xl overflow-hidden shadow-lg">
-                <div className="bg-gradient-to-r from-blue-300 to-blue-300 p-3 text-black flex items-center justify-between">
-                  <h3 className="text-lg font-bold tracking-wide">Chart of Accounts - General Ledger</h3>
-                </div>
-
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead className="bg-gradient-to-r from-gray-100 to-gray-200">
-                      <tr>
-                        <th className="px-2 py-3 text-center border-r border-gray-300 w-16 font-bold text-gray-700 text-sm">
-                          S.No.
-                        </th>
-                        <th className="px-3 py-3 text-left border-r border-gray-300 font-bold text-gray-700 text-sm">
-                          Account & Description
-                        </th>
-                        <th className="px-3 py-3 text-center border-r border-gray-300 w-32 font-bold text-black text-sm">
-                          DR. Amount
-                        </th>
-                        <th className="px-3 py-3 text-center border-r border-gray-300 w-32 font-bold text-black text-sm">
-                          CR. Amount
-                        </th>
-                        <th className="px-3 py-3 text-center w-24 font-bold text-gray-700 text-sm">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {/* INLINE ENTRY: only ONE row at a time (DR first, then CR) */}
-                      {showInlineEntry &&
-                        (inlineEntry.step !== "credit" ? (
-                          /* ---------- STEP 1 & 2: DEBIT ROW ---------- */
-                          <tr className="border-t-2 bg-gray-50 border-gray-300">
-                            <td className="px-2 py-2 text-center border-r border-gray-300 font-mono text-sm font-bold">
-                              {serialCounter}
-                            </td>
-                            <td className="px-3 py-2 border-r border-gray-300">
-                              <div className="space-y-2">
-                                <Select
-                                  value={inlineEntry.debitAccount}
-                                  onValueChange={(value) => setInlineEntry({ ...inlineEntry, debitAccount: value })}
-                                >
-                                  <SelectTrigger
-                                    onKeyDown={(e) => handleKeyPress(e, "debit")}
-                                    className="border-2 border-gray-400 focus:border-black text-sm h-9"
-                                  >
-                                    <SelectValue placeholder="Select debit account" />
-                                  </SelectTrigger>
-                                  <SelectContent>{renderAccountItems(false)}</SelectContent>
-                                </Select>
-                                <div className="bg-gray-200 text-black px-2 py-0.5 rounded-full text-xs font-bold inline-block">
-                                  (DR)
-                                </div>
-                                <Textarea
-                                  value={inlineEntry.narration}
-                                  onChange={(e) => setInlineEntry({ ...inlineEntry, narration: e.target.value })}
-                                  onKeyDown={handleNarrationKeyDown}
-                                  placeholder="Enter narration details..."
-                                  rows={2}
-                                  className="border-2 border-gray-300 focus:border-black text-sm"
-                                />
-                              </div>
-                            </td>
-                            <td className="px-3 py-2 text-center border-r border-gray-300">
-                              {inlineEntry.step === "amount" ? (
-                                <Input
-                                  type="number"
-                                  step="0.01"
-                                  value={inlineEntry.amount}
-                                  onChange={(e) => setInlineEntry({ ...inlineEntry, amount: e.target.value })}
-                                  onKeyDown={(e) => handleKeyPress(e, "amount")}
-                                  className="w-full text-center font-bold border-2 border-gray-400 focus:border-black h-9"
-                                  placeholder="0.00"
-                                  autoFocus
-                                />
-                              ) : (
-                                <span className="text-gray-400">-</span>
-                              )}
-                            </td>
-                            <td className="px-3 py-2 text-center border-r border-gray-300">
-                              <span className="text-gray-400">-</span>
-                            </td>
-                            <td className="px-3 py-2 text-center">
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={cancelInlineEntry}
-                                className="border-gray-400 text-black hover:bg-gray-100 bg-transparent"
-                              >
-                                <X className="w-4 h-4" />
-                              </Button>
-                            </td>
-                          </tr>
-                        ) : (
-                          /* ---------- STEP 3: CREDIT ROW ---------- */
-                          <tr className="border-t-2 bg-gray-50 border-gray-300">
-                            <td className="px-2 py-2 text-center border-r border-gray-300 font-mono text-sm font-bold">
-                              {serialCounter}
-                            </td>
-                            <td className="px-3 py-2 border-r border-gray-300">
-                              <div className="space-y-2">
-                                <div className="text-xs text-gray-500">
-                                  DR: {inlineEntry.debitAccount} — {formatAmount(inlineAmountNumber)}
-                                </div>
-                                <Select
-                                  value={inlineEntry.creditAccount}
-                                  onValueChange={(value) => setInlineEntry({ ...inlineEntry, creditAccount: value })}
-                                >
-                                  <SelectTrigger
-                                    onKeyDown={(e) => handleKeyPress(e, "credit")}
-                                    className="border-2 border-gray-400 focus:border-black text-sm h-9"
-                                  >
-                                    <SelectValue placeholder="Select credit account" />
-                                  </SelectTrigger>
-                                  <SelectContent>{renderAccountItems(false)}</SelectContent>
-                                </Select>
-                                <div className="bg-gray-200 text-black px-2 py-0.5 rounded-full text-xs font-bold inline-block">
-                                  (CR)
-                                </div>
-                              </div>
-                            </td>
-                            <td className="px-3 py-2 text-center border-r border-gray-300">
-                              <span className="text-gray-400">-</span>
-                            </td>
-                            <td className="px-3 py-2 text-center border-r border-gray-300">
-                              <span className="font-mono font-bold text-black bg-gray-200 px-2 py-1 rounded">
-                                {formatAmount(inlineAmountNumber)}
-                              </span>
-                            </td>
-                            <td className="px-3 py-2 text-center">
-                              <div className="flex gap-1 justify-center">
-                                {inlineEntry.creditAccount && (
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={handleInlineEntrySubmit}
-                                    className="border-green-600 text-green-600 hover:bg-green-50 hover:border-green-700 bg-transparent"
-                                    title="Add Entry"
-                                  >
-                                    <Plus className="w-4 h-4" />
-                                  </Button>
-                                )}
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={cancelInlineEntry}
-                                  className="border-gray-400 text-black hover:bg-gray-100 bg-transparent"
-                                >
-                                  <X className="w-4 h-4" />
-                                </Button>
-                              </div>
-                            </td>
-                          </tr>
-                        ))}
-
-                      {entries.map((entry) => (
-                        <tr
-                          key={entry.id}
-                          className="border-t hover:bg-gray-50 transition-colors bg-gray-25 border-gray-200"
-                        >
-                          <td className="px-2 py-3 text-center border-r border-gray-200 font-mono text-sm font-semibold text-gray-700">
-                            {entry.serialNo}
-                          </td>
-                          <td className="px-3 py-3 border-r border-gray-200">
-                            {editingId === entry.id ? (
-                              <div className="space-y-2">
-                                <Select
-                                  value={editingEntry.account}
-                                  onValueChange={(value) => setEditingEntry({ ...editingEntry, account: value })}
-                                >
-                                  <SelectTrigger className="border-2 border-gray-400 focus:border-black">
-                                    <SelectValue />
-                                  </SelectTrigger>
-                                  <SelectContent>{renderAccountItems(true)}</SelectContent>
-                                </Select>
-                                <Input
-                                  value={editingEntry.description}
-                                  onChange={(e) => setEditingEntry({ ...editingEntry, description: e.target.value })}
-                                  placeholder="Description..."
-                                  className="border-2 border-gray-400 focus:border-black"
-                                />
-                              </div>
-                            ) : (
-                              <div>
-                                <span className="font-semibold text-gray-800 text-sm">{entry.account}</span>
-                                <div
-                                  className={`inline-block ml-3 px-2 py-0.5 rounded-full text-xs font-bold ${
-                                    entry.entryType === "debit" ? "bg-gray-200 text-black" : "bg-gray-300 text-black"
-                                  }`}
-                                >
-                                  ({entry.entryType === "debit" ? "DR" : "CR"})
-                                </div>
-                                {entry.description && (
-                                  <div className="text-sm text-gray-600 mt-1 bg-gray-50 p-2 rounded-lg">
-                                    {entry.description}
-                                  </div>
-                                )}
-                              </div>
-                            )}
-                          </td>
-                          <td className="px-3 py-3 text-center border-r border-gray-200">
-                            {editingId === entry.id && editingEntry.entryType === "debit" ? (
-                              <Input
-                                type="number"
-                                step="0.01"
-                                value={editingEntry.amount}
-                                onChange={(e) => setEditingEntry({ ...editingEntry, amount: e.target.value })}
-                                className="w-full text-center font-bold border-2 border-gray-400 focus:border-black"
-                              />
-                            ) : entry.debitAmount > 0 ? (
-                              <span className="font-mono font-bold text-black bg-gray-200 px-2 py-1 rounded-lg">
-                                {formatAmount(entry.debitAmount)}
-                              </span>
-                            ) : (
-                              <span className="text-gray-400">-</span>
-                            )}
-                          </td>
-                          <td className="px-3 py-3 text-center border-r border-gray-200">
-                            {editingId === entry.id && editingEntry.entryType === "credit" ? (
-                              <Input
-                                type="number"
-                                step="0.01"
-                                value={editingEntry.amount}
-                                onChange={(e) => setEditingEntry({ ...editingEntry, amount: e.target.value })}
-                                className="w-full text-center font-bold border-2 border-gray-400 focus:border-black"
-                              />
-                            ) : entry.creditAmount > 0 ? (
-                              <span className="font-mono font-bold text-black bg-gray-300 px-2 py-1 rounded-lg">
-                                {formatAmount(entry.creditAmount)}
-                              </span>
-                            ) : (
-                              <span className="text-gray-400">-</span>
-                            )}
-                          </td>
-                          <td className="px-3 py-3 text-center">
-                            {editingId === entry.id ? (
-                              <div className="flex gap-2 justify-center">
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={saveEdit}
-                                  className="border-gray-600 text-black hover:bg-gray-100 bg-transparent"
-                                >
-                                  <Save className="w-4 h-4" />
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={cancelEdit}
-                                  className="border-gray-600 text-black hover:bg-gray-100 bg-transparent"
-                                >
-                                  <X className="w-4 h-4" />
-                                </Button>
-                              </div>
-                            ) : (
-                              <div className="flex gap-2 justify-center">
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => startEdit(entry)}
-                                  className="border-gray-600 text-black hover:bg-gray-100"
-                                >
-                                  <Edit3 className="w-4 h-4" />
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => deleteEntry(entry.id)}
-                                  className="border-gray-600 text-black hover:bg-gray-100"
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </Button>
-                              </div>
-                            )}
-                          </td>
-                        </tr>
-                      ))}
-
-                      {!showInlineEntry && (
-                        <tr className="border-t-2 border-gray-200">
-                          <td colSpan="5" className="px-4 py-4 text-center">
-                            <Button
-                              variant="outline"
-                              onClick={() => setShowInlineEntry(true)}
-                              className="w-full py-3 text-base font-semibold border-2 border-dashed border-gray-400 text-blue-300 hover:bg-gray-100 hover:border-blue-300 transition-all duration-200"
-                            >
-                              <Plus className="w-5 h-5 mr-3" />
-                              Add New Entry
-                            </Button>
-                          </td>
-                        </tr>
-                      )}
-
-                      <tr className="border-t-4 border-blue-300 bg-gradient-to-r from-blue-300 to-blue-300 text-black font-bold">
-                        <td className="px-2 py-3 border-r border-blue-600"></td>
-                        <td className="px-3 py-3 border-r border-blue-600 text-center text-lg">TOTAL</td>
-                        <td className="px-3 py-3 text-center border-r border-blue-600">
-                          <span className="font-mono text-lg text-black px-3 py-1 rounded-lg">
-                            {formatAmount(totalDebit)}
-                          </span>
+              {/* ---------- ENTRY TABLE ---------- */}
+              <div className="border border-gray-300 rounded-md overflow-x-auto">
+                <table className="w-full min-w-[1050px] text-sm">
+                  <thead className="bg-gray-50">
+                    <tr className="text-center text-gray-700">
+                      <th className="px-2 py-3 border-r border-gray-200 w-44">AccountCode</th>
+                      <th className="px-2 py-3 border-r border-gray-200 w-48">Account</th>
+                      <th className="px-2 py-3 border-r border-gray-200 w-36">Bill Reference</th>
+                      <th className="px-2 py-3 border-r border-gray-200 w-32">Debit</th>
+                      <th className="px-2 py-3 border-r border-gray-200 w-32">Credit</th>
+                      <th className="px-2 py-3 border-r border-gray-200 w-32">Cheque No</th>
+                      <th className="px-2 py-3 border-r border-gray-200 w-36">Cheque Date</th>
+                      <th className="px-2 py-3 border-r border-gray-200">Remarks</th>
+                      <th className="px-2 py-3 w-14">Rem</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map((r) => (
+                      <tr key={r.id} className="border-t border-gray-200 align-top">
+                        <td className="p-2 border-r border-gray-200">
+                          <AccountCodeCell
+                            value={r.accountCode}
+                            accounts={accountOptions}
+                            onSelect={(acc) => selectAccount(r.id, acc)}
+                          />
                         </td>
-                        <td className="px-3 py-3 text-center border-r border-blue-600">
-                          <span className="font-mono text-lg bg-blue-300 text-black px-3 py-1 rounded-lg">
-                            {formatAmount(totalCredit)}
-                          </span>
+                        <td className="p-2 border-r border-gray-200">
+                          <Input
+                            value={r.accountName}
+                            readOnly
+                            tabIndex={-1}
+                            className="h-9 text-sm bg-gray-100 border-gray-200"
+                          />
                         </td>
-                        <td className="px-3 py-3"></td>
+                        <td className="p-2 border-r border-gray-200">
+                          <div className="relative">
+                            <Input
+                              value={r.billReference}
+                              onChange={(e) => updateRow(r.id, { billReference: e.target.value })}
+                              className="pr-8 h-9 text-sm border-gray-300"
+                            />
+                            <Search className="w-4 h-4 absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none" />
+                          </div>
+                        </td>
+                        <td className="p-2 border-r border-gray-200">
+                          <Input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={r.debit}
+                            onChange={(e) => setDebit(r.id, e.target.value)}
+                            className="h-9 text-sm text-right border-gray-300"
+                          />
+                        </td>
+                        <td className="p-2 border-r border-gray-200">
+                          <Input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={r.credit}
+                            onChange={(e) => setCredit(r.id, e.target.value)}
+                            className="h-9 text-sm text-right border-gray-300"
+                          />
+                        </td>
+                        <td className="p-2 border-r border-gray-200">
+                          <Input
+                            value={r.chequeNo}
+                            onChange={(e) => updateRow(r.id, { chequeNo: e.target.value })}
+                            className="h-9 text-sm border-gray-300"
+                          />
+                        </td>
+                        <td className="p-2 border-r border-gray-200">
+                          <Input
+                            type="date"
+                            value={r.chequeDate}
+                            onChange={(e) => updateRow(r.id, { chequeDate: e.target.value })}
+                            className="h-9 text-sm border-gray-300"
+                          />
+                        </td>
+                        <td className="p-2 border-r border-gray-200">
+                          <Input
+                            value={r.remarks}
+                            onChange={(e) => updateRow(r.id, { remarks: e.target.value })}
+                            placeholder="Remarks"
+                            className="h-9 text-sm border-gray-300"
+                          />
+                        </td>
+                        <td className="p-2 text-center">
+                          <button
+                            type="button"
+                            onClick={() => removeRow(r.id)}
+                            disabled={rows.length <= 2}
+                            title={rows.length <= 2 ? "Kam az kam 2 rows chahiye" : "Remove row"}
+                            className="inline-flex items-center justify-center w-7 h-7 border border-red-500 text-red-500 rounded hover:bg-red-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </td>
                       </tr>
-                    </tbody>
-                  </table>
-                </div>
+                    ))}
+                  </tbody>
+                </table>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-8 pt-4 border-t-2 border-gray-200">
-                <div className="text-center">
-                  <div className="border-t-2 border-gray-600 pt-2 mt-8">
-                    <span className="text-sm font-bold text-black bg-gray-100 px-3 py-1 rounded-full">
-                      Prepared By:
-                    </span>
-                  </div>
+              <div className="mt-3">
+                <Button onClick={addRow} className="bg-blue-600 hover:bg-blue-700 text-white">
+                  <Plus className="w-4 h-4 mr-1" />
+                  Add More
+                </Button>
+              </div>
+
+              {/* ---------- TOTALS ---------- */}
+              <div className="mt-4 flex flex-wrap items-center gap-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-semibold text-gray-700">Total Debit</span>
+                  <Input
+                    readOnly
+                    value={formatAmount(totalDebit)}
+                    className="w-36 h-9 text-right font-mono bg-gray-100 border-gray-300"
+                  />
                 </div>
-                <div className="text-center">
-                  <div className="border-t-2 border-gray-700 pt-2 mt-8">
-                    <span className="text-sm font-bold text-black bg-gray-200 px-3 py-1 rounded-full">
-                      Supervised By:
-                    </span>
-                  </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-semibold text-gray-700">Total Credit</span>
+                  <Input
+                    readOnly
+                    value={formatAmount(totalCredit)}
+                    className="w-36 h-9 text-right font-mono bg-gray-100 border-gray-300"
+                  />
                 </div>
-                <div className="text-center">
-                  <div className="border-t-2 border-gray-800 pt-2 mt-8">
-                    <span className="text-sm font-bold text-black bg-gray-300 px-3 py-1 rounded-full">
-                      Received By:
-                    </span>
+
+                {isBalanced ? (
+                  <div className="flex items-center gap-2 bg-green-100 text-green-800 border border-green-300 px-3 py-1.5 rounded-md text-sm font-medium">
+                    <Check className="w-4 h-4" />
+                    Balanced (Debit = Credit)
                   </div>
-                </div>
+                ) : (
+                  <div className="flex items-center gap-2 bg-red-100 text-red-800 border border-red-300 px-3 py-1.5 rounded-md text-sm font-medium">
+                    <AlertTriangle className="w-4 h-4" />
+                    {toCents(totalDebit) === 0 && toCents(totalCredit) === 0
+                      ? "Amount daalo — Debit aur Credit equal hona zaroori hai"
+                      : `Not equal — Difference: ${formatAmount(Math.abs(diffCents) / 100)} (${diffCents > 0 ? "Credit kam" : "Debit kam"})`}
+                  </div>
+                )}
+              </div>
+
+              {/* ---------- ACTIONS ---------- */}
+              <div className="mt-5 flex items-center gap-3">
+                <Button
+                  onClick={saveVoucher}
+                  disabled={saving || !isBalanced}
+                  className="bg-blue-600 hover:bg-blue-700 text-white px-10"
+                >
+                  {saving ? "Saving..." : isEditMode ? "Update" : "Save"}
+                </Button>
+                <Button
+                  onClick={handlePrint}
+                  disabled={!isBalanced}
+                  variant="outline"
+                  className="border-gray-400 text-black hover:bg-gray-100 bg-transparent"
+                >
+                  Print
+                </Button>
+                {saveSuccess && (
+                  <div className="flex items-center gap-2 bg-green-500 text-white px-3 py-1 rounded-full text-sm">
+                    <Check className="w-4 h-4" />
+                    Saved Successfully
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>
         </div>
 
-        {/* PRINT-ONLY AREA (compact voucher) */}
+        {/* ---------- PRINT-ONLY AREA (compact) ---------- */}
         <div className="print-area px-4 py-4">
-          <div className="max-w-2xl mx-auto">
+          <div className="mx-auto">
             <header className="text-center mb-3">
               <h1 className="text-lg font-bold text-black">demo</h1>
               <p className="text-xs text-gray-700">Journal Voucher (GL)</p>
             </header>
 
-            <section className="grid grid-cols-2 gap-2 text-xs mb-2">
+            <section className="grid grid-cols-2 gap-2 text-xs mb-3">
               <div>
                 <span className="font-semibold">Voucher No: </span>
                 {voucherNo}
@@ -981,49 +718,54 @@ export default function JournalVoucher() {
               </div>
             </section>
 
-            <section className="mb-3 text-xs">
-              <span className="font-semibold">Narration: </span>
-              {(narration && narration.trim()) ||
-                (entries.find((e) => (e.description || "").trim())?.description || "").trim()}
-            </section>
-
-            <section className="mb-4">
-              <table className="w-full border-collapse text-xs">
-                <thead>
-                  <tr>
-                    <th className="border border-gray-400 px-1.5 py-1 text-left">S.No</th>
-                    <th className="border border-gray-400 px-1.5 py-1 text-left">Account</th>
-                    <th className="border border-gray-400 px-1.5 py-1 text-right">DR</th>
-                    <th className="border border-gray-400 px-1.5 py-1 text-right">CR</th>
+            <table className="w-full border-collapse text-xs mb-6">
+              <thead>
+                <tr>
+                  <th className="border border-gray-400 px-1.5 py-1 text-left">S.No</th>
+                  <th className="border border-gray-400 px-1.5 py-1 text-left">Code</th>
+                  <th className="border border-gray-400 px-1.5 py-1 text-left">Account</th>
+                  <th className="border border-gray-400 px-1.5 py-1 text-left">Bill Ref</th>
+                  <th className="border border-gray-400 px-1.5 py-1 text-right">Debit</th>
+                  <th className="border border-gray-400 px-1.5 py-1 text-right">Credit</th>
+                  <th className="border border-gray-400 px-1.5 py-1 text-left">Cheque No</th>
+                  <th className="border border-gray-400 px-1.5 py-1 text-left">Cheque Date</th>
+                  <th className="border border-gray-400 px-1.5 py-1 text-left">Remarks</th>
+                </tr>
+              </thead>
+              <tbody>
+                {printRows.map((r, i) => (
+                  <tr key={r.id}>
+                    <td className="border border-gray-300 px-1.5 py-1 align-top">{i + 1}</td>
+                    <td className="border border-gray-300 px-1.5 py-1 align-top">{r.accountCode}</td>
+                    <td className="border border-gray-300 px-1.5 py-1 align-top">{r.accountName}</td>
+                    <td className="border border-gray-300 px-1.5 py-1 align-top">{r.billReference || "-"}</td>
+                    <td className="border border-gray-300 px-1.5 py-1 align-top text-right">
+                      {toCents(r.debit) > 0 ? formatAmount(r.debit) : "-"}
+                    </td>
+                    <td className="border border-gray-300 px-1.5 py-1 align-top text-right">
+                      {toCents(r.credit) > 0 ? formatAmount(r.credit) : "-"}
+                    </td>
+                    <td className="border border-gray-300 px-1.5 py-1 align-top">{r.chequeNo || "-"}</td>
+                    <td className="border border-gray-300 px-1.5 py-1 align-top">
+                      {r.chequeDate ? formatDate(r.chequeDate) : "-"}
+                    </td>
+                    <td className="border border-gray-300 px-1.5 py-1 align-top">{r.remarks || "-"}</td>
                   </tr>
-                </thead>
-                <tbody>
-                  {entries.map((entry) => (
-                    <tr key={entry.id}>
-                      <td className="border border-gray-300 px-1.5 py-1 align-top">{entry.serialNo}</td>
-                      <td className="border border-gray-300 px-1.5 py-1 align-top">{entry.account}</td>
-                      <td className="border border-gray-300 px-1.5 py-1 align-top text-right">
-                        {entry.debitAmount > 0 ? formatAmount(entry.debitAmount) : "-"}
-                      </td>
-                      <td className="border border-gray-300 px-1.5 py-1 align-top text-right">
-                        {entry.creditAmount > 0 ? formatAmount(entry.creditAmount) : "-"}
-                      </td>
-                    </tr>
-                  ))}
-                  <tr>
-                    <td className="border border-gray-400 px-1.5 py-1 font-semibold" colSpan={2}>
-                      Total
-                    </td>
-                    <td className="border border-gray-400 px-1.5 py-1 text-right font-semibold">
-                      {formatAmount(totalDebit)}
-                    </td>
-                    <td className="border border-gray-400 px-1.5 py-1 text-right font-semibold">
-                      {formatAmount(totalCredit)}
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </section>
+                ))}
+                <tr>
+                  <td className="border border-gray-400 px-1.5 py-1 font-semibold" colSpan={4}>
+                    Total
+                  </td>
+                  <td className="border border-gray-400 px-1.5 py-1 text-right font-semibold">
+                    {formatAmount(totalDebit)}
+                  </td>
+                  <td className="border border-gray-400 px-1.5 py-1 text-right font-semibold">
+                    {formatAmount(totalCredit)}
+                  </td>
+                  <td className="border border-gray-400 px-1.5 py-1" colSpan={3}></td>
+                </tr>
+              </tbody>
+            </table>
 
             <section className="grid grid-cols-3 gap-4 mt-8 text-xs">
               <div className="text-center border-t border-gray-600 pt-1 font-semibold">Prepared By</div>
@@ -1045,10 +787,6 @@ export default function JournalVoucher() {
             }
             .print-area {
               display: block !important;
-            }
-            body {
-              -webkit-print-color-adjust: exact;
-              print-color-adjust: exact;
             }
             .print-footer {
               position: fixed;
@@ -1072,15 +810,10 @@ export default function JournalVoucher() {
           .print-preview .print-area {
             display: block !important;
           }
-          .print-preview img,
-          .print-area img {
-            display: none !important;
-          }
         }
-
         @media print {
           @page {
-            size: A5;
+            size: A5 landscape;
             margin: 8mm;
           }
           body * {
