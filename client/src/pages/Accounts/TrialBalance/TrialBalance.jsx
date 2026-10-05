@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useEffect } from "react"
+import React, { useState, useEffect, useRef } from "react"
 import {
   Search,
   Download,
@@ -11,7 +11,8 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 
-const API_BASE_URL = "https://debug-nxby.vercel.app/api"
+// const API_BASE_URL = "http://localhost:5000/api"
+const API_BASE_URL = "https://software-check-cbuc.vercel.app/api"
 const format = (n) => {
   const num = Number.parseFloat(n) || 0
   return num === 0 ? "0" : num.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -32,6 +33,9 @@ export default function TrialBalanceIntegrated() {
   const [loading, setLoading] = useState(false)
   const [searchTerm, setSearchTerm] = useState("")
   const [error, setError] = useState(null)
+
+  // ✅ FIX 1: Ref to prevent double API calls
+  const isCalculating = useRef(false)
 
   useEffect(() => {
     const style = document.createElement('style')
@@ -58,34 +62,80 @@ export default function TrialBalanceIntegrated() {
     return () => document.head.removeChild(style)
   }, [])
 
+  // ✅ FIX 2: Debounce useEffect to prevent double calls on mount
   useEffect(() => {
     if (startDate && endDate) {
-      calculateTrialBalance()
+      const timer = setTimeout(() => {
+        calculateTrialBalance()
+      }, 300)
+      return () => clearTimeout(timer)
     }
   }, [startDate, endDate])
 
   const calculateTrialBalance = async () => {
     if (!startDate || !endDate) return
 
+    // ✅ FIX 3: Prevent concurrent calls
+    if (isCalculating.current) {
+      console.log("⚠️ Already calculating, skipping duplicate call...")
+      return
+    }
+
+    isCalculating.current = true
     setLoading(true)
     setError(null)
-    
+
     try {
       console.log("📊 Fetching all accounts from ledger API...")
-      
+
       // Fetch all accounts
       const accountsResponse = await fetch(`${API_BASE_URL}/ledgers/accounts`)
-      const accountsData = await accountsResponse.json()
-      
-      if (!accountsData.success) {
-        throw new Error("Failed to fetch accounts")
+
+      // ✅ Check HTTP status first — don't blindly parse JSON.
+      // This is what surfaces the REAL backend error (500 / DB down / CORS etc.)
+      // instead of a generic "Failed to fetch accounts" message.
+      if (!accountsResponse.ok) {
+        let backendMessage = ""
+        try {
+          const errJson = await accountsResponse.json()
+          backendMessage = errJson.message || errJson.error || JSON.stringify(errJson)
+        } catch {
+          backendMessage = await accountsResponse.text()
+        }
+        throw new Error(
+          `Failed to fetch accounts (HTTP ${accountsResponse.status}): ${backendMessage}`
+        )
       }
 
-      console.log(`✅ Loaded ${accountsData.count} accounts`)
+      const accountsData = await accountsResponse.json()
 
-      // For each account, fetch its ledger data
+      if (!accountsData.success) {
+        throw new Error(
+          `Failed to fetch accounts: ${accountsData.message || accountsData.error || "Unknown backend error"}`
+        )
+      }
+
+      if (!Array.isArray(accountsData.data)) {
+        throw new Error("Failed to fetch accounts: backend returned no account data array")
+      }
+
+      // ✅ FIX 4: Deduplicate accounts from API before processing
+      const seen = new Set()
+      const uniqueApiAccounts = accountsData.data.filter(account => {
+        const key = account.code || account.name
+        if (seen.has(key)) {
+          console.warn(`⚠️ Duplicate account from API: ${key}`)
+          return false
+        }
+        seen.add(key)
+        return true
+      })
+
+      console.log(`✅ Loaded ${uniqueApiAccounts.length} unique accounts (was ${accountsData.data.length})`)
+
+      // For each unique account, fetch its ledger data
       const trialBalanceEntries = await Promise.all(
-        accountsData.data.map(async (account) => {
+        uniqueApiAccounts.map(async (account) => {
           try {
             const params = new URLSearchParams({
               accountCode: account.code || "",
@@ -97,6 +147,14 @@ export default function TrialBalanceIntegrated() {
             const ledgerResponse = await fetch(
               `${API_BASE_URL}/ledgers/account-ledger?${params}`
             )
+
+            if (!ledgerResponse.ok) {
+              console.error(
+                `Ledger fetch failed for ${account.name} (HTTP ${ledgerResponse.status})`
+              )
+              return null
+            }
+
             const ledgerData = await ledgerResponse.json()
 
             if (!ledgerData.success) {
@@ -117,10 +175,10 @@ export default function TrialBalanceIntegrated() {
 
             // Determine opening debit/credit based on normal balance
             const normalBalance = account.normalBalance || (account.category === 'Assets' || account.category === 'Expenses' ? 'debit' : 'credit')
-            
+
             let openingDebit = 0
             let openingCredit = 0
-            
+
             if (openingBalance > 0) {
               if (normalBalance === 'debit') {
                 openingDebit = openingBalance
@@ -138,7 +196,7 @@ export default function TrialBalanceIntegrated() {
             // Determine closing debit/credit based on normal balance
             let closingDebit = 0
             let closingCredit = 0
-            
+
             if (closingBalance > 0) {
               if (normalBalance === 'debit') {
                 closingDebit = closingBalance
@@ -153,51 +211,20 @@ export default function TrialBalanceIntegrated() {
               }
             }
 
-            // ✅ CRITICAL FIX: Purchase Discount Special Handling
-            // Purchase Discount is a REVENUE account (credit normal balance)
-            // So it MUST show in CREDIT columns, not DEBIT
+            // ✅ Purchase Discount Special Handling
             if (account.code === 'PURCH-DISC' || account.name === 'PURCHASES DISCOUNT') {
-              console.log(`🔧 Fixing Purchase Discount display:`, {
-                code: account.code,
-                currentDebit,
-                currentCredit,
-                closingBalance,
-                normalBalance,
-                category: account.category
-              })
-              
-              // Purchase Discount should ALWAYS show in CREDIT side
-              // Because it's a REVENUE (contra-expense) account
               if (closingBalance !== 0) {
-                // Force to show in credit column
                 closingDebit = 0
                 closingCredit = Math.abs(closingBalance)
               }
-              
-              console.log(`✅ After fix - ClosingDebit: ${closingDebit}, ClosingCredit: ${closingCredit}`)
             }
 
-            // ✅ CRITICAL FIX: Sales Discount Special Handling
-            // Sales Discount is an EXPENSE account (debit normal balance)
-            // So it MUST show in DEBIT columns
+            // ✅ Sales Discount Special Handling
             if (account.code === 'SALES-DISC' || account.name === 'SALES DISCOUNT') {
-              console.log(`🔧 Fixing Sales Discount display:`, {
-                code: account.code,
-                currentDebit,
-                currentCredit,
-                closingBalance,
-                normalBalance,
-                category: account.category
-              })
-              
-              // Sales Discount should ALWAYS show in DEBIT side
               if (closingBalance !== 0) {
-                // Force to show in debit column
                 closingCredit = 0
                 closingDebit = Math.abs(closingBalance)
               }
-              
-              console.log(`✅ After fix - ClosingDebit: ${closingDebit}, ClosingCredit: ${closingCredit}`)
             }
 
             const hasActivity = currentDebit > 0 || currentCredit > 0 || openingBalance !== 0
@@ -227,21 +254,27 @@ export default function TrialBalanceIntegrated() {
         (entry) => entry !== null && entry.hasActivity
       )
 
-      console.log(`\n📊 Final Trial Balance Summary:`)
-      activeAccounts.forEach(acc => {
-        if (acc.code === 'PURCH-DISC' || acc.code === 'SALES-DISC') {
-          console.log(`  ${acc.code}: Current Dr=${acc.currentDebit}, Cr=${acc.currentCredit} | Closing Dr=${acc.closingDebit}, Cr=${acc.closingCredit}`)
+      // ✅ FIX 5: Final deduplication by account code (safety net)
+      const finalSeen = new Set()
+      const uniqueAccounts = activeAccounts.filter(entry => {
+        const key = entry.code || entry.name
+        if (finalSeen.has(key)) {
+          console.warn(`⚠️ Duplicate removed at final step: ${key}`)
+          return false
         }
+        finalSeen.add(key)
+        return true
       })
 
-      setTrialBalanceData(activeAccounts)
-      console.log(`✅ Trial Balance calculated with ${activeAccounts.length} active accounts`)
-      
+      setTrialBalanceData(uniqueAccounts)
+      console.log(`✅ Trial Balance ready: ${uniqueAccounts.length} unique active accounts`)
+
     } catch (error) {
       console.error("Error calculating trial balance:", error)
-      setError("Failed to calculate trial balance: " + error.message)
+      setError(error.message)
     } finally {
       setLoading(false)
+      isCalculating.current = false
     }
   }
 
@@ -250,12 +283,13 @@ export default function TrialBalanceIntegrated() {
     return new Date(date).toLocaleDateString("en-GB", options).replace(/ /g, "-")
   }
 
-  const filteredData = trialBalanceData.filter(
-    (row) =>
-      (row.code && row.code.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (row.name && row.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (row.category && row.category.toLowerCase().includes(searchTerm.toLowerCase()))
-  )
+  const filteredData = trialBalanceData.filter((row) => {
+    const term = String(searchTerm || "").toLowerCase()
+    const code = String(row?.code || "").toLowerCase()
+    const name = String(row?.name || "").toLowerCase()
+    const category = String(row?.category || "").toLowerCase()
+    return code.includes(term) || name.includes(term) || category.includes(term)
+  })
 
   const totals = filteredData.reduce(
     (acc, row) => ({
@@ -277,7 +311,6 @@ export default function TrialBalanceIntegrated() {
   )
 
   const handleExcelExport = () => {
-    // Create CSV content
     const headers = [
       "Account Code",
       "Account Name",
@@ -289,7 +322,7 @@ export default function TrialBalanceIntegrated() {
       "Closing Debit",
       "Closing Credit",
     ]
-    
+
     const rows = filteredData.map((row) => [
       row.code,
       row.name,
@@ -333,7 +366,7 @@ export default function TrialBalanceIntegrated() {
   return (
     <div className="min-h-screen p-6 bg-gradient-to-br from-gray-50 via-slate-50 to-zinc-50">
       <div className="max-w-[1400px] mx-auto bg-white shadow-lg rounded-lg overflow-hidden print-container">
-        
+
         {/* Header */}
         <div className="p-6 border-b bg-gradient-to-r from-blue-100 to-blue-200">
           <div className="flex items-start justify-between gap-4 mb-4 no-print">
@@ -349,7 +382,7 @@ export default function TrialBalanceIntegrated() {
           </div>
 
           <div className="text-center mb-4 print-header">
-            <h1 className="text-3xl font-bold text-gray-800">demo</h1>
+            <h1 className="text-3xl font-bold text-gray-800">Denim Locker</h1>
             <h2 className="text-2xl font-semibold text-blue-600 mt-2">TRIAL BALANCE</h2>
             <p className="text-sm text-gray-600 mt-2">(Integrated with General Ledger)</p>
           </div>
@@ -517,7 +550,7 @@ export default function TrialBalanceIntegrated() {
                   ))
                 ) : (
                   <tr>
-                    <td colSpan="9" className="px-4 py-12 text-center text-gray-500 border border-gray-300">
+                    <td colSpan="7" className="px-4 py-12 text-center text-gray-500 border border-gray-300">
                       <div className="text-lg mb-2">
                         {searchTerm
                           ? "No accounts found matching your search"
@@ -533,7 +566,7 @@ export default function TrialBalanceIntegrated() {
                     <td className="px-4 py-4 text-sm border border-gray-300" colSpan="3">
                       <span className="text-lg">TOTAL</span>
                     </td>
-                 <td className="px-4 py-4 text-sm text-right border border-gray-300 font-mono text-green-700 text-lg">
+                    <td className="px-4 py-4 text-sm text-right border border-gray-300 font-mono text-green-700 text-lg">
                       {format(totals.currentDebit)}
                     </td>
                     <td className="px-4 py-4 text-sm text-right border border-gray-300 font-mono text-red-700 text-lg">
@@ -560,9 +593,6 @@ export default function TrialBalanceIntegrated() {
                 * All amounts are calculated from General Ledger entries
               </span>
               <div className="font-medium text-gray-700">
-                <span className="mr-4">
-                  Opening Difference: {format(Math.abs(totals.openingDebit - totals.openingCredit))}
-                </span>
                 <span className="mr-4">
                   Current Difference: {format(Math.abs(totals.currentDebit - totals.currentCredit))}
                 </span>
