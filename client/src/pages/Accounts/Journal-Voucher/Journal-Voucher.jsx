@@ -28,6 +28,7 @@ const newRow = () => ({
   chequeNo: "",
   chequeDate: "",
   remarks: "",
+  auto: false, // true => amount was auto-filled to balance the voucher
 })
 
 const initialRows = () => [newRow(), newRow()]
@@ -41,6 +42,35 @@ const generateUniqueVoucherNo = () => {
 }
 
 const toCents = (v) => Math.round((Number.parseFloat(v) || 0) * 100)
+
+const hasAmount = (r) => toCents(r.debit) > 0 || toCents(r.credit) > 0
+
+// Keeps the "auto" row (the one that balances the voucher) in sync with the other rows.
+// Picks the existing auto row, else the last row that has no amount yet (e.g. the 2nd row on first open).
+const rebalance = (list, editedId) => {
+  let idx = -1
+  for (let i = list.length - 1; i >= 0; i--) {
+    if (list[i].auto && list[i].id !== editedId) {
+      idx = i
+      break
+    }
+  }
+  if (idx === -1) {
+    for (let i = list.length - 1; i >= 0; i--) {
+      if (list[i].id !== editedId && !hasAmount(list[i])) {
+        idx = i
+        break
+      }
+    }
+  }
+  if (idx === -1) return list
+
+  const diff = list.reduce((sum, r, i) => (i === idx ? sum : sum + toCents(r.debit) - toCents(r.credit)), 0)
+  const target = { ...list[idx], auto: true, debit: "", credit: "" }
+  if (diff > 0) target.credit = (diff / 100).toString()
+  else if (diff < 0) target.debit = (Math.abs(diff) / 100).toString()
+  return list.map((r, i) => (i === idx ? target : r))
+}
 
 /* ---------- Account code search cell (code input + dropdown) ---------- */
 function AccountCodeCell({ value, accounts, onSelect }) {
@@ -128,11 +158,15 @@ export default function JournalVoucher() {
   const totalCredit = rows.reduce((s, r) => s + (Number.parseFloat(r.credit) || 0), 0)
   const diffCents = toCents(totalDebit) - toCents(totalCredit)
   const isBalanced = diffCents === 0 && toCents(totalDebit) > 0
+  const usedRows = rows.filter((r) => r.accountCode || r.debit || r.credit)
+  const allHaveAccounts = usedRows.every((r) => r.accountCode && r.accountName)
+  // Save / Print only open when Debit = Credit (and every amount row has an account)
+  const canSubmit = isBalanced && allHaveAccounts
 
   /* ---------- Print ---------- */
   const handlePrint = () => {
-    if (!isBalanced) {
-      alert("Total Debit aur Total Credit equal hona zaroori hai.")
+    if (!canSubmit) {
+      alert("Total Debit aur Total Credit equal hona zaroori hai (aur har row ka account select ho).")
       return
     }
     setShowPrintPreview(true)
@@ -209,21 +243,46 @@ export default function JournalVoucher() {
 
   const selectAccount = (id, acc) => updateRow(id, { accountCode: String(acc.code), accountName: acc.name })
 
-  // Typing in one side clears the other side of the same row
-  const setDebit = (id, value) => updateRow(id, value ? { debit: value, credit: "" } : { debit: "" })
-  const setCredit = (id, value) => updateRow(id, value ? { credit: value, debit: "" } : { credit: "" })
+  // Typing in one side clears the other side of the same row; the auto row re-balances itself
+  const setAmount = (id, side, value) =>
+    setRows((prev) => {
+      const other = side === "debit" ? "credit" : "debit"
+      const next = prev.map((r) =>
+        r.id === id ? { ...r, [side]: value, ...(value ? { [other]: "" } : {}), auto: false } : r,
+      )
+      return rebalance(next, id)
+    })
+  const setDebit = (id, value) => setAmount(id, "debit", value)
+  const setCredit = (id, value) => setAmount(id, "credit", value)
 
-  // New row: pre-fill the difference on the opposite side so voucher balances quickly
+  // Add More: puts the missing difference on the opposite side so the voucher becomes equal.
+  // Re-uses an empty row instead of adding a blank one in between.
   const addRow = () => {
-    const r = newRow()
-    if (diffCents > 0) r.credit = (diffCents / 100).toString()
-    else if (diffCents < 0) r.debit = (Math.abs(diffCents) / 100).toString()
-    setRows((prev) => [...prev, r])
+    setRows((prev) => {
+      const d = prev.reduce((s, r) => s + toCents(r.debit) - toCents(r.credit), 0)
+      const fill = (r) => ({
+        ...r,
+        auto: true,
+        debit: d < 0 ? (Math.abs(d) / 100).toString() : "",
+        credit: d > 0 ? (d / 100).toString() : "",
+      })
+      if (d === 0) return [...prev, newRow()] // already equal -> plain blank row
+
+      let emptyIdx = -1
+      for (let i = prev.length - 1; i >= 0; i--) {
+        if (!hasAmount(prev[i])) {
+          emptyIdx = i
+          break
+        }
+      }
+      if (emptyIdx !== -1) return prev.map((r, i) => (i === emptyIdx ? fill(r) : r))
+      return [...prev, fill(newRow())]
+    })
   }
 
   const removeRow = (id) => {
     if (rows.length <= 2) return
-    setRows((prev) => prev.filter((r) => r.id !== id))
+    setRows((prev) => rebalance(prev.filter((r) => r.id !== id), null))
   }
 
   const resetForm = () => {
@@ -253,6 +312,7 @@ export default function JournalVoucher() {
         chequeNo: e.chequeNo || "",
         chequeDate: e.chequeDate ? String(e.chequeDate).split("T")[0] : "",
         remarks: e.description || "",
+        auto: false,
       }
     })
     setRows(loaded.length >= 2 ? loaded : [...loaded, ...initialRows().slice(loaded.length)])
@@ -656,10 +716,15 @@ export default function JournalVoucher() {
                   />
                 </div>
 
-                {isBalanced ? (
+                {canSubmit ? (
                   <div className="flex items-center gap-2 bg-green-100 text-green-800 border border-green-300 px-3 py-1.5 rounded-md text-sm font-medium">
                     <Check className="w-4 h-4" />
                     Balanced (Debit = Credit)
+                  </div>
+                ) : isBalanced ? (
+                  <div className="flex items-center gap-2 bg-amber-100 text-amber-800 border border-amber-300 px-3 py-1.5 rounded-md text-sm font-medium">
+                    <AlertTriangle className="w-4 h-4" />
+                    Equal hai — ab har amount wali row mein Account select karo
                   </div>
                 ) : (
                   <div className="flex items-center gap-2 bg-red-100 text-red-800 border border-red-300 px-3 py-1.5 rounded-md text-sm font-medium">
@@ -675,14 +740,14 @@ export default function JournalVoucher() {
               <div className="mt-5 flex items-center gap-3">
                 <Button
                   onClick={saveVoucher}
-                  disabled={saving || !isBalanced}
+                  disabled={saving || !canSubmit}
                   className="bg-blue-600 hover:bg-blue-700 text-white px-10"
                 >
                   {saving ? "Saving..." : isEditMode ? "Update" : "Save"}
                 </Button>
                 <Button
                   onClick={handlePrint}
-                  disabled={!isBalanced}
+                  disabled={!canSubmit}
                   variant="outline"
                   className="border-gray-400 text-black hover:bg-gray-100 bg-transparent"
                 >
