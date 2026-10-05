@@ -404,6 +404,7 @@ export default function JournalVoucher() {
       return {
         id: r.id,
         serialNo: i + 1,
+        pairId: i + 1, // backend schema requires a numeric pairId on every entry
         account: `${r.accountCode} - ${r.accountName}`,
         debitAmount: isDebit ? Number.parseFloat(r.debit) : 0,
         creditAmount: isDebit ? 0 : Number.parseFloat(r.credit),
