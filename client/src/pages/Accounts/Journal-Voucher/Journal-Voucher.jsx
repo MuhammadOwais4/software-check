@@ -1,6 +1,7 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
+import { createPortal } from "react-dom"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -73,13 +74,55 @@ const rebalance = (list, editedId) => {
 }
 
 /* ---------- Account code search cell (code input + dropdown) ---------- */
-function AccountCodeCell({ value, accounts, onSelect }) {
+function AccountCodeCell({ value, accounts, onSelect, focusSignal = 0 }) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState(value || "")
+  const [pos, setPos] = useState(null)
+  const wrapRef = useRef(null)
 
   useEffect(() => {
     setQuery(value || "")
   }, [value])
+
+  // Parent asks this cell to take focus (e.g. after "Add More") -> focus + open dropdown
+  useEffect(() => {
+    if (!focusSignal) return
+    const input = wrapRef.current?.querySelector("input")
+    if (input) {
+      input.scrollIntoView({ block: "nearest", inline: "nearest" })
+      input.focus()
+    }
+  }, [focusSignal])
+
+  // Dropdown is rendered in a portal with fixed position so the table's
+  // scroll container can never clip it.
+  const updatePos = () => {
+    const el = wrapRef.current
+    if (!el) return
+    const r = el.getBoundingClientRect()
+    const spaceBelow = window.innerHeight - r.bottom
+    const spaceAbove = r.top
+    const openUp = spaceBelow < 200 && spaceAbove > spaceBelow
+    const room = (openUp ? spaceAbove : spaceBelow) - 12
+    setPos({
+      left: Math.min(r.left, Math.max(8, window.innerWidth - 296)),
+      width: Math.max(r.width, 288),
+      top: openUp ? undefined : r.bottom + 4,
+      bottom: openUp ? window.innerHeight - r.top + 4 : undefined,
+      maxHeight: Math.max(120, Math.min(260, room)),
+    })
+  }
+
+  useEffect(() => {
+    if (!open) return
+    updatePos()
+    window.addEventListener("scroll", updatePos, true)
+    window.addEventListener("resize", updatePos)
+    return () => {
+      window.removeEventListener("scroll", updatePos, true)
+      window.removeEventListener("resize", updatePos)
+    }
+  }, [open])
 
   const q = query.trim().toLowerCase()
   const filtered = accounts
@@ -96,7 +139,7 @@ function AccountCodeCell({ value, accounts, onSelect }) {
   }
 
   return (
-    <div className="relative">
+    <div className="relative" ref={wrapRef}>
       <Input
         value={query}
         onChange={(e) => {
@@ -109,28 +152,43 @@ function AccountCodeCell({ value, accounts, onSelect }) {
         className="pr-8 h-9 text-sm border-gray-300"
       />
       <Search className="w-4 h-4 absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none" />
-      {open && (
-        <div className="absolute z-50 mt-1 w-72 max-h-60 overflow-y-auto bg-white border border-gray-300 rounded-md shadow-lg">
-          {filtered.length === 0 ? (
-            <div className="px-3 py-2 text-sm text-gray-500">No account found</div>
-          ) : (
-            filtered.map((a) => (
-              <div
-                key={a.value}
-                onMouseDown={(e) => {
-                  e.preventDefault()
-                  onSelect(a)
-                  setOpen(false)
-                }}
-                className="px-3 py-1.5 text-sm cursor-pointer hover:bg-blue-50 flex justify-between gap-2"
-              >
-                <span className="font-mono">{a.code}</span>
-                <span className="truncate text-gray-700">{a.name}</span>
-              </div>
-            ))
-          )}
-        </div>
-      )}
+      {open &&
+        pos &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <div
+            style={{
+              position: "fixed",
+              left: pos.left,
+              top: pos.top,
+              bottom: pos.bottom,
+              width: pos.width,
+              maxHeight: pos.maxHeight,
+              zIndex: 9999,
+            }}
+            className="overflow-y-auto bg-white border border-gray-300 rounded-md shadow-lg"
+          >
+            {filtered.length === 0 ? (
+              <div className="px-3 py-2 text-sm text-gray-500">No account found</div>
+            ) : (
+              filtered.map((a) => (
+                <div
+                  key={a.value}
+                  onMouseDown={(e) => {
+                    e.preventDefault()
+                    onSelect(a)
+                    setOpen(false)
+                  }}
+                  className="px-3 py-1.5 text-sm cursor-pointer hover:bg-blue-50 flex justify-between gap-2"
+                >
+                  <span className="font-mono">{a.code}</span>
+                  <span className="truncate text-gray-700">{a.name}</span>
+                </div>
+              ))
+            )}
+          </div>,
+          document.body,
+        )}
     </div>
   )
 }
@@ -152,6 +210,7 @@ export default function JournalVoucher() {
   const [voucherToDelete, setVoucherToDelete] = useState(null)
   const [deleting, setDeleting] = useState(false)
   const [showPrintPreview, setShowPrintPreview] = useState(false)
+  const [focusReq, setFocusReq] = useState({ id: null, n: 0 }) // which row's account cell should get focus
 
   /* ---------- Totals & balance rule ---------- */
   const totalDebit = rows.reduce((s, r) => s + (Number.parseFloat(r.debit) || 0), 0)
@@ -256,28 +315,41 @@ export default function JournalVoucher() {
   const setCredit = (id, value) => setAmount(id, "credit", value)
 
   // Add More: puts the missing difference on the opposite side so the voucher becomes equal.
-  // Re-uses an empty row instead of adding a blank one in between.
+  // Re-uses an empty row instead of adding a blank one in between, then focuses its account cell.
   const addRow = () => {
-    setRows((prev) => {
-      const d = prev.reduce((s, r) => s + toCents(r.debit) - toCents(r.credit), 0)
-      const fill = (r) => ({
-        ...r,
-        auto: true,
-        debit: d < 0 ? (Math.abs(d) / 100).toString() : "",
-        credit: d > 0 ? (d / 100).toString() : "",
-      })
-      if (d === 0) return [...prev, newRow()] // already equal -> plain blank row
+    const d = rows.reduce((sum, r) => sum + toCents(r.debit) - toCents(r.credit), 0)
+    const fill = (r) => ({
+      ...r,
+      auto: true,
+      debit: d < 0 ? (Math.abs(d) / 100).toString() : "",
+      credit: d > 0 ? (d / 100).toString() : "",
+    })
 
+    let targetId
+    let next
+    if (d === 0) {
+      const blank = newRow() // already equal -> plain blank row
+      targetId = blank.id
+      next = [...rows, blank]
+    } else {
       let emptyIdx = -1
-      for (let i = prev.length - 1; i >= 0; i--) {
-        if (!hasAmount(prev[i])) {
+      for (let i = rows.length - 1; i >= 0; i--) {
+        if (!hasAmount(rows[i])) {
           emptyIdx = i
           break
         }
       }
-      if (emptyIdx !== -1) return prev.map((r, i) => (i === emptyIdx ? fill(r) : r))
-      return [...prev, fill(newRow())]
-    })
+      if (emptyIdx !== -1) {
+        targetId = rows[emptyIdx].id
+        next = rows.map((r, i) => (i === emptyIdx ? fill(r) : r))
+      } else {
+        const added = fill(newRow())
+        targetId = added.id
+        next = [...rows, added]
+      }
+    }
+    setRows(next)
+    setFocusReq((f) => ({ id: targetId, n: f.n + 1 }))
   }
 
   const removeRow = (id) => {
@@ -610,6 +682,7 @@ export default function JournalVoucher() {
                             value={r.accountCode}
                             accounts={accountOptions}
                             onSelect={(acc) => selectAccount(r.id, acc)}
+                            focusSignal={focusReq.id === r.id ? focusReq.n : 0}
                           />
                         </td>
                         <td className="p-2 border-r border-gray-200">
