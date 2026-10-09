@@ -23,7 +23,7 @@ const newRow = () => ({
   id: `row-${Date.now()}-${Math.floor(Math.random() * 1000000)}`,
   accountCode: "",
   accountName: "",
-  billReference: "",
+  narration: "", // separate narration for every row
   debit: "",
   credit: "",
   chequeNo: "",
@@ -331,12 +331,12 @@ export default function JournalVoucher() {
         id: e.id || e._id || `loaded-${Date.now()}-${i}-${Math.floor(Math.random() * 1000000)}`,
         accountCode: code || "",
         accountName: rest.join(" - "),
-        billReference: e.billReference || "",
+        narration: e.description || "",
         debit: e.debitAmount > 0 ? String(e.debitAmount) : "",
         credit: e.creditAmount > 0 ? String(e.creditAmount) : "",
         chequeNo: e.chequeNo || "",
         chequeDate: e.chequeDate ? String(e.chequeDate).split("T")[0] : "",
-        remarks: e.description || "",
+        remarks: "",
       }
     })
     setRows(loaded.length >= 2 ? loaded : [...loaded, ...initialRows().slice(loaded.length)])
@@ -409,14 +409,15 @@ export default function JournalVoucher() {
         debitAmount: isDebit ? Number.parseFloat(r.debit) : 0,
         creditAmount: isDebit ? 0 : Number.parseFloat(r.credit),
         entryType: isDebit ? "debit" : "credit",
-        description: (r.remarks || "").trim(),
-        billReference: r.billReference,
+        description: (r.narration || r.remarks || "").trim(), // each row keeps its own narration
         chequeNo: r.chequeNo,
         chequeDate: r.chequeDate || null,
       }
     })
 
-    const narration = (entries.find((e) => e.description)?.description || "Journal Voucher").trim()
+    // Voucher-level narration = all distinct row narrations together (schema needs one text)
+    const narration =
+      [...new Set(entries.map((e) => e.description).filter(Boolean))].join(" | ").trim() || "Journal Voucher"
 
     try {
       setSaving(true)
@@ -623,7 +624,7 @@ export default function JournalVoucher() {
                     <tr className="text-center text-gray-700">
                       <th className="px-2 py-3 border-r border-gray-200 w-44">AccountCode</th>
                       <th className="px-2 py-3 border-r border-gray-200 w-48">Account</th>
-                      <th className="px-2 py-3 border-r border-gray-200 w-36">Bill Reference</th>
+                      <th className="px-2 py-3 border-r border-gray-200 w-56">Narration</th>
                       <th className="px-2 py-3 border-r border-gray-200 w-32">Debit</th>
                       <th className="px-2 py-3 border-r border-gray-200 w-32">Credit</th>
                       <th className="px-2 py-3 border-r border-gray-200 w-32">Cheque No</th>
@@ -652,14 +653,12 @@ export default function JournalVoucher() {
                           />
                         </td>
                         <td className="p-2 border-r border-gray-200">
-                          <div className="relative">
-                            <Input
-                              value={r.billReference}
-                              onChange={(e) => updateRow(r.id, { billReference: e.target.value })}
-                              className="pr-8 h-9 text-sm border-gray-300"
-                            />
-                            <Search className="w-4 h-4 absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none" />
-                          </div>
+                          <Input
+                            value={r.narration}
+                            onChange={(e) => updateRow(r.id, { narration: e.target.value })}
+                            placeholder="Narration"
+                            className="h-9 text-sm border-gray-300"
+                          />
                         </td>
                         <td className="p-2 border-r border-gray-200">
                           <Input
@@ -824,7 +823,7 @@ export default function JournalVoucher() {
                   <th className="border border-gray-400 px-1.5 py-1 text-left">S.No</th>
                   <th className="border border-gray-400 px-1.5 py-1 text-left">Code</th>
                   <th className="border border-gray-400 px-1.5 py-1 text-left">Account</th>
-                  <th className="border border-gray-400 px-1.5 py-1 text-left">Bill Ref</th>
+                  <th className="border border-gray-400 px-1.5 py-1 text-left">Narration</th>
                   <th className="border border-gray-400 px-1.5 py-1 text-right">Debit</th>
                   <th className="border border-gray-400 px-1.5 py-1 text-right">Credit</th>
                   <th className="border border-gray-400 px-1.5 py-1 text-left">Cheque No</th>
@@ -838,7 +837,7 @@ export default function JournalVoucher() {
                     <td className="border border-gray-300 px-1.5 py-1 align-top">{i + 1}</td>
                     <td className="border border-gray-300 px-1.5 py-1 align-top">{r.accountCode}</td>
                     <td className="border border-gray-300 px-1.5 py-1 align-top">{r.accountName}</td>
-                    <td className="border border-gray-300 px-1.5 py-1 align-top">{r.billReference || "-"}</td>
+                    <td className="border border-gray-300 px-1.5 py-1 align-top">{r.narration || "-"}</td>
                     <td className="border border-gray-300 px-1.5 py-1 align-top text-right">
                       {toCents(r.debit) > 0 ? formatAmount(r.debit) : "-"}
                     </td>
