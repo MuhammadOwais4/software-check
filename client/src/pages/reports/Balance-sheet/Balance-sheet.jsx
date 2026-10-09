@@ -1,3 +1,4 @@
+import { API_BASE_URL } from "../../../config"
 import React, { useState, useEffect } from "react";
 import { Calendar, RefreshCw, Printer } from "lucide-react";
 
@@ -58,7 +59,7 @@ function BalanceSheet() {
       setLoadingVendors(true);
       console.log("📋 Loading vendors from liabilities...");
       
-      const response = await fetch(`https://debug-nxby.vercel.app/api/chart-of-accounts/liabilities`);
+      const response = await fetch(`${API_BASE_URL}/chart-of-accounts/liabilities`);
       const data = await response.json();
       
       if (!data.success) {
@@ -81,7 +82,7 @@ function BalanceSheet() {
   const loadClosingStock = async () => {
     try {
       console.log("📦 Fetching Closing Stock from /products/get-stock...");
-      const response = await fetch(`https://debug-nxby.vercel.app/api/products/get-stock`);
+      const response = await fetch(`${API_BASE_URL}/products/get-stock`);
       if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
       const data = await response.json();
       if (!data.success) { setClosingStock(0); return 0; }
@@ -102,7 +103,7 @@ function BalanceSheet() {
     try {
       console.log("📊 Fetching Net Profit/Loss from P&L API...");
       const response = await fetch(
-        `https://debug-nxby.vercel.app/api/profit-loss?fromDate=${startDate}&toDate=${endDate}`
+        `${API_BASE_URL}/profit-loss?fromDate=${startDate}&toDate=${endDate}`
       );
       if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
       const data = await response.json();
@@ -143,7 +144,7 @@ function BalanceSheet() {
           toDate: endDate,
         });
         const response = await fetch(
-          `https://debug-nxby.vercel.app/api/ledgers/account-ledger?${params}`
+          `${API_BASE_URL}/ledgers/account-ledger?${params}`
         );
         const data = await response.json();
         let balance = 0;
@@ -176,7 +177,7 @@ function BalanceSheet() {
         loadTaxAccountBalances(),
       ]);
 
-      const accountsResponse = await fetch(`https://debug-nxby.vercel.app/api/ledgers/accounts`);
+      const accountsResponse = await fetch(`${API_BASE_URL}/ledgers/accounts`);
       const accountsData = await accountsResponse.json();
       
       if (!accountsData.success) throw new Error("Failed to fetch accounts");
@@ -201,7 +202,7 @@ function BalanceSheet() {
           });
 
           const ledgerResponse = await fetch(
-            `https://debug-nxby.vercel.app/api/ledgers/account-ledger?${params}`
+            `${API_BASE_URL}/ledgers/account-ledger?${params}`
           );
           const ledgerData = await ledgerResponse.json();
 

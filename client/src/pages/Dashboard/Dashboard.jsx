@@ -1,3 +1,4 @@
+import { API_BASE_URL } from "../../config"
 import { useState, useEffect } from "react"
 import {
   BarChart, Bar, LineChart, Line, Cell,
@@ -12,7 +13,6 @@ import {
 } from "lucide-react"
 
 const COLORS = ["#8b5cf6", "#06b6d4", "#10b981", "#f59e0b", "#ec4899"]
-const API_BASE_URL = "https://debug-nxby.vercel.app/api"
 
 const apiClient = {
   get: async (url) => {

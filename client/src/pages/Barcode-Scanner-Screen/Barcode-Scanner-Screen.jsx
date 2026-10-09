@@ -1,3 +1,4 @@
+import { API_BASE_URL } from "../../config"
 "use client"
 
 import { useState, useEffect, useRef, useCallback } from "react"
@@ -18,7 +19,7 @@ const TEMPLATE_HEADERS = [
 ]
 
 // ── Base URL — same as what handleImport uses ────────────────────────────────
-const BASE_URL = "https://debug-nxby.vercel.app/api"
+const BASE_URL = API_BASE_URL
 
 // ── Auth token helper ────────────────────────────────────────────────────────
 const getToken = () => (typeof localStorage !== "undefined" ? localStorage.getItem("authToken") : null)

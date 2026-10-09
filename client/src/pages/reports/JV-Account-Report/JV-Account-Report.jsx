@@ -1,0 +1,407 @@
+"use client"
+
+import { useState, useEffect, useMemo } from "react"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Search, RefreshCw, Printer, ExternalLink } from "lucide-react"
+import ApiHandler from "@/Api/apihandle"
+
+/* ---------------------------------------------------------------------------
+   JV Account Report
+   Shows every Journal Voucher (JV) line that touched
+     1. Receivable accounts   (Assets  -> type RECEIVABLES)  => "Received"
+     2. Liability accounts    (all Liabilities)
+     3. Capital accounts      (Equity  -> type Capital)
+   with JV No, JV Date, Account, Narration and Amount.
+   Click a JV No to open that JV on its own page (JV Detail).
+--------------------------------------------------------------------------- */
+
+const SECTIONS = [
+  {
+    key: "receivable",
+    label: "Receivables (Received)",
+    drLabel: "Receivable (Dr)",
+    crLabel: "Received (Cr)",
+    netLabel: "Outstanding Receivable",
+    net: (dr, cr) => dr - cr,
+    tone: "border-emerald-400 text-emerald-700 bg-emerald-50",
+  },
+  {
+    key: "liability",
+    label: "Liabilities",
+    drLabel: "Paid (Dr)",
+    crLabel: "Payable (Cr)",
+    netLabel: "Outstanding Liability",
+    net: (dr, cr) => cr - dr,
+    tone: "border-amber-400 text-amber-700 bg-amber-50",
+  },
+  {
+    key: "capital",
+    label: "Equity - Capital Account",
+    drLabel: "Withdrawn (Dr)",
+    crLabel: "Capital In (Cr)",
+    netLabel: "Capital Balance",
+    net: (dr, cr) => cr - dr,
+    tone: "border-indigo-400 text-indigo-700 bg-indigo-50",
+  },
+]
+
+const codeOf = (account) => String(account || "").split(" - ")[0].trim()
+const nameOf = (account) => String(account || "").split(" - ").slice(1).join(" - ").trim()
+
+const toLocalDay = (value) => {
+  if (!value) return ""
+  const d = new Date(value)
+  if (Number.isNaN(d.getTime())) return ""
+  const m = String(d.getMonth() + 1).padStart(2, "0")
+  const day = String(d.getDate()).padStart(2, "0")
+  return `${d.getFullYear()}-${m}-${day}`
+}
+
+const formatDate = (value) => {
+  if (!value) return ""
+  const d = new Date(value)
+  if (Number.isNaN(d.getTime())) return ""
+  return d.toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric" }).replace(/\//g, ".")
+}
+
+const formatAmount = (value) => {
+  const n = Number(value)
+  if (!Number.isFinite(n)) return "0"
+  return new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }).format(n)
+}
+
+export default function JVAccountReport({ onOpenJV }) {
+  const [vouchers, setVouchers] = useState([])
+  const [accounts, setAccounts] = useState({ receivable: [], liability: [], capital: [] })
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState("")
+
+  const [activeSection, setActiveSection] = useState("receivable")
+  const [fromDate, setFromDate] = useState("")
+  const [toDate, setToDate] = useState("")
+  const [search, setSearch] = useState("")
+  const [accountFilter, setAccountFilter] = useState("all")
+
+  const loadData = async () => {
+    try {
+      setLoading(true)
+      setError("")
+
+      const [assetsRes, liabilitiesRes, equityRes] = await Promise.all([
+        ApiHandler.getAssets().catch(() => ({ data: [] })),
+        ApiHandler.getLiabilities().catch(() => ({ data: [] })),
+        ApiHandler.getEquity().catch(() => ({ data: [] })),
+      ])
+
+      setAccounts({
+        receivable: (assetsRes.data || []).filter((a) => String(a.type).toUpperCase() === "RECEIVABLES"),
+        liability: liabilitiesRes.data || [],
+        capital: (equityRes.data || []).filter((a) => String(a.type).toLowerCase() === "capital"),
+      })
+
+      // The vouchers API is paginated -> read every page of JV vouchers
+      const all = []
+      let page = 1
+      let pages = 1
+      do {
+        const res = await ApiHandler.getVouchers({ type: "JV", limit: 200, page })
+        all.push(...(res.data || []))
+        pages = res.pagination?.pages || 1
+        page += 1
+      } while (page <= pages && page <= 50)
+      setVouchers(all)
+    } catch (err) {
+      console.error("JV report load error:", err)
+      setError(err.message || "Failed to load report")
+      setVouchers([])
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    loadData()
+  }, [])
+
+  // account code -> section
+  const sectionByCode = useMemo(() => {
+    const map = new Map()
+    SECTIONS.forEach((s) => (accounts[s.key] || []).forEach((a) => map.set(String(a.code).trim(), s.key)))
+    return map
+  }, [accounts])
+
+  // one row per JV line that hits one of the three account groups
+  const allRows = useMemo(() => {
+    const out = []
+    vouchers.forEach((v) => {
+      ;(v.entries || []).forEach((e, idx) => {
+        const code = codeOf(e.account)
+        const section = sectionByCode.get(code)
+        if (!section) return
+        out.push({
+          key: `${v._id}-${e._id || idx}`,
+          voucherId: v._id,
+          voucherNo: v.voucherNo,
+          date: v.voucherDate,
+          day: toLocalDay(v.voucherDate),
+          code,
+          name: nameOf(e.account),
+          narration: (e.description || "").trim() || (v.narration || "").trim(),
+          debit: Number(e.debitAmount) || 0,
+          credit: Number(e.creditAmount) || 0,
+          section,
+        })
+      })
+    })
+    out.sort((a, b) => (a.day < b.day ? 1 : a.day > b.day ? -1 : String(b.voucherNo).localeCompare(String(a.voucherNo))))
+    return out
+  }, [vouchers, sectionByCode])
+
+  // date + text filters (shared by the section cards and the table)
+  const baseRows = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    return allRows.filter((r) => {
+      if (fromDate && r.day < fromDate) return false
+      if (toDate && r.day > toDate) return false
+      if (q && !`${r.voucherNo} ${r.code} ${r.name} ${r.narration}`.toLowerCase().includes(q)) return false
+      return true
+    })
+  }, [allRows, fromDate, toDate, search])
+
+  const totalsBySection = useMemo(() => {
+    const t = {}
+    SECTIONS.forEach((s) => (t[s.key] = { debit: 0, credit: 0, count: 0 }))
+    baseRows.forEach((r) => {
+      t[r.section].debit += r.debit
+      t[r.section].credit += r.credit
+      t[r.section].count += 1
+    })
+    return t
+  }, [baseRows])
+
+  const section = SECTIONS.find((s) => s.key === activeSection) || SECTIONS[0]
+  const sectionAccounts = accounts[section.key] || []
+
+  const rows = useMemo(
+    () => baseRows.filter((r) => r.section === section.key && (accountFilter === "all" || r.code === accountFilter)),
+    [baseRows, section.key, accountFilter],
+  )
+
+  const totalDebit = rows.reduce((s, r) => s + r.debit, 0)
+  const totalCredit = rows.reduce((s, r) => s + r.credit, 0)
+
+  const openJV = (id) => {
+    if (onOpenJV) onOpenJV(id)
+    else window.location.hash = encodeURIComponent(`JV Detail:${id}`)
+  }
+
+  const switchSection = (key) => {
+    setActiveSection(key)
+    setAccountFilter("all")
+  }
+
+  return (
+    <div className="min-h-screen p-4 bg-gradient-to-br from-gray-50 via-slate-50 to-zinc-50">
+      <style>{`
+        @media print {
+          body * { visibility: hidden !important; }
+          .jv-print-area, .jv-print-area * { visibility: visible !important; }
+          .jv-print-area { position: absolute; left: 0; top: 0; width: 100%; padding: 8px; }
+          .jv-no-print { display: none !important; }
+          .jv-scroll { max-height: none !important; overflow: visible !important; }
+          @page { size: A4 landscape; margin: 8mm; }
+        }
+      `}</style>
+
+      <Card className="w-full max-w-[1400px] mx-auto shadow-xl border-0 overflow-hidden jv-print-area">
+        <CardHeader className="bg-blue-300 text-black py-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <CardTitle className="text-2xl font-bold tracking-wide">JV Account Report</CardTitle>
+              <p className="text-sm opacity-80 mt-1">
+                Journal Voucher entries of Receivables, Liabilities and Capital accounts
+              </p>
+            </div>
+            <div className="flex gap-2 jv-no-print">
+              <Button
+                variant="outline"
+                onClick={loadData}
+                disabled={loading}
+                className="bg-white/30 border-white/40 text-black hover:bg-white/50"
+              >
+                <RefreshCw className={`w-4 h-4 mr-2 ${loading ? "animate-spin" : ""}`} />
+                {loading ? "Loading..." : "Refresh"}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => window.print()}
+                className="bg-white/30 border-white/40 text-black hover:bg-white/50"
+              >
+                <Printer className="w-4 h-4 mr-2" />
+                Print
+              </Button>
+            </div>
+          </div>
+        </CardHeader>
+
+        <CardContent className="p-4 bg-white">
+          {error && (
+            <div className="mb-3 bg-red-100 text-red-800 border border-red-300 rounded-md px-3 py-2 text-sm">
+              {error}
+            </div>
+          )}
+
+          {/* ---------- Filters ---------- */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-4 jv-no-print">
+            <div className="space-y-1">
+              <Label className="text-xs font-semibold text-gray-700">From Date</Label>
+              <Input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="h-9" />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs font-semibold text-gray-700">To Date</Label>
+              <Input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="h-9" />
+            </div>
+            <div className="space-y-1 md:col-span-2">
+              <Label className="text-xs font-semibold text-gray-700">Search (JV No / Account / Narration)</Label>
+              <div className="relative">
+                <Input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Search..."
+                  className="h-9 pr-8"
+                />
+                <Search className="w-4 h-4 absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none" />
+              </div>
+            </div>
+          </div>
+
+          {/* ---------- Section cards ---------- */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+            {SECTIONS.map((s) => {
+              const t = totalsBySection[s.key]
+              const active = s.key === activeSection
+              return (
+                <button
+                  key={s.key}
+                  type="button"
+                  onClick={() => switchSection(s.key)}
+                  className={`text-left rounded-lg border-2 p-3 transition-all ${
+                    active ? `${s.tone} shadow-md` : "border-gray-200 bg-white hover:bg-gray-50"
+                  }`}
+                >
+                  <div className="font-bold text-base">{s.label}</div>
+                  <div className="text-xs text-gray-600 mb-2">{t.count} {t.count === 1 ? "entry" : "entries"}</div>
+                  <div className="grid grid-cols-2 gap-2 text-sm">
+                    <div>
+                      <div className="text-xs text-gray-500">{s.drLabel}</div>
+                      <div className="font-mono font-semibold">{formatAmount(t.debit)}</div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-gray-500">{s.crLabel}</div>
+                      <div className="font-mono font-semibold">{formatAmount(t.credit)}</div>
+                    </div>
+                  </div>
+                  <div className="mt-2 text-xs text-gray-600">
+                    {s.netLabel}: <span className="font-mono font-bold">{formatAmount(s.net(t.debit, t.credit))}</span>
+                  </div>
+                </button>
+              )
+            })}
+          </div>
+
+          {/* ---------- Account filter for the active section ---------- */}
+          <div className="flex flex-wrap items-center gap-3 mb-3">
+            <h3 className="text-lg font-bold text-gray-800">{section.label} - Details</h3>
+            <div className="flex items-center gap-2 jv-no-print">
+              <span className="text-sm text-gray-600">Account:</span>
+              <select
+                value={accountFilter}
+                onChange={(e) => setAccountFilter(e.target.value)}
+                className="h-9 border border-gray-300 rounded-md px-2 text-sm bg-white max-w-xs"
+              >
+                <option value="all">All accounts ({sectionAccounts.length})</option>
+                {sectionAccounts
+                  .slice()
+                  .sort((a, b) => String(a.code).localeCompare(String(b.code)))
+                  .map((a) => (
+                    <option key={a.code} value={String(a.code)}>
+                      {a.code} - {a.name}
+                    </option>
+                  ))}
+              </select>
+            </div>
+          </div>
+
+          {/* ---------- Table ---------- */}
+          <div className="border border-gray-300 rounded-md overflow-auto max-h-[60vh] jv-scroll">
+            <table className="w-full min-w-[950px] text-sm">
+              <thead className="bg-gray-100 sticky top-0">
+                <tr className="text-gray-700">
+                  <th className="px-2 py-2 border-r border-gray-200 w-12 text-center">S.No</th>
+                  <th className="px-2 py-2 border-r border-gray-200 text-left w-44">JV No</th>
+                  <th className="px-2 py-2 border-r border-gray-200 text-left w-28">JV Date</th>
+                  <th className="px-2 py-2 border-r border-gray-200 text-left w-24">Code</th>
+                  <th className="px-2 py-2 border-r border-gray-200 text-left">Account</th>
+                  <th className="px-2 py-2 border-r border-gray-200 text-left">Narration</th>
+                  <th className="px-2 py-2 border-r border-gray-200 text-right w-36">{section.drLabel}</th>
+                  <th className="px-2 py-2 text-right w-36">{section.crLabel}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} className="px-3 py-8 text-center text-gray-500">
+                      {loading ? "Loading..." : "No JV entries found for these filters"}
+                    </td>
+                  </tr>
+                ) : (
+                  rows.map((r, i) => (
+                    <tr key={r.key} className="border-t border-gray-200 hover:bg-blue-50/50 align-top">
+                      <td className="px-2 py-1.5 text-center text-gray-600">{i + 1}</td>
+                      <td className="px-2 py-1.5">
+                        <button
+                          type="button"
+                          onClick={() => openJV(r.voucherId)}
+                          className="inline-flex items-center gap-1 font-mono text-blue-700 hover:underline"
+                          title="Open this JV"
+                        >
+                          {r.voucherNo}
+                          <ExternalLink className="w-3 h-3 jv-no-print" />
+                        </button>
+                      </td>
+                      <td className="px-2 py-1.5 whitespace-nowrap">{formatDate(r.date)}</td>
+                      <td className="px-2 py-1.5 font-mono">{r.code}</td>
+                      <td className="px-2 py-1.5 font-medium text-gray-800">{r.name}</td>
+                      <td className="px-2 py-1.5 text-gray-600">{r.narration || "-"}</td>
+                      <td className="px-2 py-1.5 text-right font-mono">{r.debit > 0 ? formatAmount(r.debit) : "-"}</td>
+                      <td className="px-2 py-1.5 text-right font-mono">{r.credit > 0 ? formatAmount(r.credit) : "-"}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+              {rows.length > 0 && (
+                <tfoot>
+                  <tr className="border-t-2 border-blue-300 bg-blue-100 font-bold">
+                    <td colSpan={6} className="px-2 py-2 text-right">
+                      Total ({rows.length} entries) &nbsp;|&nbsp; {section.netLabel}:{" "}
+                      {formatAmount(section.net(totalDebit, totalCredit))}
+                    </td>
+                    <td className="px-2 py-2 text-right font-mono">{formatAmount(totalDebit)}</td>
+                    <td className="px-2 py-2 text-right font-mono">{formatAmount(totalCredit)}</td>
+                  </tr>
+                </tfoot>
+              )}
+            </table>
+          </div>
+
+          <p className="mt-3 text-xs text-gray-500 jv-no-print">
+            Tip: JV No par click karo - woh JV poore detail ke saath naye page par khul jayega.
+          </p>
+        </CardContent>
+      </Card>
+    </div>
+  )
+}

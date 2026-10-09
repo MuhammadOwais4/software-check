@@ -1,7 +1,8 @@
+import { API_ORIGIN } from "../../../config"
 import { useState, useEffect } from "react";
 
 // ── API ───────────────────────────────────────────────────────────────────────
-const BASE_URL = "https://debug-nxby.vercel.app";
+const BASE_URL = API_ORIGIN;
 const getToken = () => localStorage.getItem("token") || sessionStorage.getItem("token") || "";
 const http = {
   get: async (path) => {

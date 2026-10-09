@@ -22,6 +22,8 @@ import BankReceiptVoucher from "@/pages/Accounts/Bank-Receipt-Voucher/Bank-Recei
 import GeneralLedger from "@/pages/Accounts/Genreal-Leager/Genreal-Leager";
 import TrialBalance from "@/pages/Accounts/TrialBalance/TrialBalance";
 import VoucherQuery from "@/pages/Accounts/Voucher-Query/Voucher-Query";
+import JVAccountReport from "@/pages/reports/JV-Account-Report/JV-Account-Report";
+import JVDetail from "@/pages/reports/JV-Account-Report/JV-Detail";
 import Dashboard from "@/pages/Dashboard/Dashboard.jsx";
 import SalesDiscountVouchers from "@/pages/Accounts/Sales-Discount-Vouchers/Sales-Discount-Vouchers";
 import PurchaseDiscountVouchers from "@/pages/Accounts/Purchase-Discount-Vouchers/Purchase-Discount-Vouchers";
@@ -35,6 +37,7 @@ import Icon from "@/assets/icon.png";
 const REPORT_ITEMS = [
   { key: "General Ledger",     label: "General Ledger" },
   { key: "Trial Balance",      label: "Trial Balance" },
+  { key: "JV Account Report",  label: "JV Account Report" },
 ];
 
 const ACCOUNT_ITEMS = [
@@ -83,7 +86,7 @@ export default function AdminDashboard() {
     return () => document.removeEventListener("mousedown", onOutside);
   }, []);
 
-  const isReportActive  = REPORT_ITEMS.some(r => r.key === activeTab);
+  const isReportActive  = REPORT_ITEMS.some(r => r.key === activeTab) || activeTab.startsWith("JV Detail:");
   const isAccountActive = ACCOUNT_ITEMS.some(a => a.key === activeTab);
 
   const NavBtn = ({ tab, label }) => (
@@ -210,6 +213,13 @@ export default function AdminDashboard() {
         {activeTab === "reports"            && <Reports products={products} expenses={expenses} sales={sales} />}
         {activeTab === "General Ledger"     && <GeneralLedger />}
         {activeTab === "Trial Balance"      && <TrialBalance />}
+        {activeTab === "JV Account Report"  && <JVAccountReport onOpenJV={(id) => setActiveTab("JV Detail:" + id)} />}
+        {activeTab.startsWith("JV Detail:") && (
+          <JVDetail
+            id={activeTab.slice("JV Detail:".length)}
+            onBack={() => setActiveTab("JV Account Report")}
+          />
+        )}
 
         {activeTab === "chart-of-accounts"  && (
           <>

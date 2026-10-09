@@ -1,7 +1,8 @@
+import { API_BASE_URL } from "../../../config"
 import React, { useState, useEffect } from "react"
 import { Calendar, RefreshCw } from "lucide-react"
 
-const API = "https://debug-nxby.vercel.app/api"
+const API = API_BASE_URL
 
 function ProfitLoss() {
   const [startDate, setStartDate] = useState("")

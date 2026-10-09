@@ -1,7 +1,8 @@
+import { API_BASE_URL } from "../../config"
 import { useState, useEffect, useCallback } from "react";
 import axios from "axios";
 
-const API = "https://debug-nxby.vercel.app/api/raw-materials";
+const API = `${API_BASE_URL}/raw-materials`;
 
 const EMPTY_FORM = { fabricName: "", colour: "", barcode: "" };
 
