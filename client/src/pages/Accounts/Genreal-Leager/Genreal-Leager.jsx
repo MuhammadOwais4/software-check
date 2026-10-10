@@ -23,13 +23,14 @@ export default function GeneralLedger() {
   const [loadingAccounts, setLoadingAccounts]       = useState(false)
   const [openingBalance, setOpeningBalance]         = useState(0)
   const [closingBalance, setClosingBalance]         = useState(0)
+  const [normalBalance, setNormalBalance]         = useState("debit")
 
   const searchRef   = useRef(null)
   const dropdownRef = useRef(null)
 
   useEffect(() => {
     const style = document.createElement("style")
-    style.innerHTML = `@media print { body * { visibility: hidden; } #print-area, #print-area * { visibility: visible; } #print-area { position: absolute; left: 0; top: 0; width: 100%; } .print\\:hidden { display: none !important; } }`
+    style.innerHTML = `@media print { body * { visibility: hidden; } #print-area, #print-area * { visibility: visible; } #print-area { position: absolute; left: 0; top: 0; width: 100%; } .print\\:hidden { display: none !important; } .gl-scroll { max-height: none !important; overflow: visible !important; } }`
     document.head.appendChild(style)
     return () => document.head.removeChild(style)
   }, [])
@@ -67,6 +68,7 @@ export default function GeneralLedger() {
         setLedgerEntries(response.data.entries)
         setOpeningBalance(response.data.summary.openingBalance)
         setClosingBalance(response.data.summary.closingBalance)
+        setNormalBalance(response.data.summary.normalBalance || "debit")
       } else { alert("Failed to load ledger entries"); setLedgerEntries([]) }
     } catch (error) { alert(`Failed: ${error.message}`); setLedgerEntries([]) }
     finally { setLoading(false) }
@@ -125,6 +127,17 @@ export default function GeneralLedger() {
   const totalDebits  = ledgerEntries.reduce((s, e) => s + e.debit,  0)
   const totalCredits = ledgerEntries.reduce((s, e) => s + e.credit, 0)
 
+  // Balance is stored relative to the account's normal side. Convert to a Dr / Cr display:
+  //   Debit balance  -> 46,000 Dr
+  //   Credit balance -> (-46,000) Cr
+  const formatBalance = (balance) => {
+    const b = parseFloat(balance || 0)
+    const net = normalBalance === "debit" ? b : -b
+    if (Math.abs(net) < 0.005) return { text: "0", color: "#374151" }
+    if (net > 0) return { text: `${formatCurrency(net)} Dr`, color: "#1d4ed8" }
+    return { text: `(-${formatCurrency(Math.abs(net))}) Cr`, color: "#dc2626" }
+  }
+
   const VOUCHER_BADGE = {
     Sale:"#dcfce7:#15803d", Purchase:"#ffedd5:#c2410c", SPV:"#fee2e2:#b91c1c",
     CRV:"#dbeafe:#1d4ed8", OHV:"#fef9c3:#92400e", WHT:"#f3e8ff:#6b21a8",
@@ -140,7 +153,7 @@ export default function GeneralLedger() {
           <button onClick={handleClose} style={btnStyle("default")}>← Back</button>
           <button onClick={() => loadLedgerEntries(selectedAccount, fromDate, toDate)} disabled={loading} style={btnStyle("primary")}>{loading ? "⏳..." : "🔄 Refresh"}</button>
           <button onClick={() => window.print()} style={btnStyle("success")}>🖨️ Print</button>
-          <button onClick={() => exportCSV(ledgerEntries, selectedAccount, fromDate, toDate, formatDate, formatCurrency)} style={btnStyle("default")}>📥 Export CSV</button>
+          <button onClick={() => exportCSV(ledgerEntries, selectedAccount, fromDate, toDate, formatDate, formatCurrency, formatBalance)} style={btnStyle("default")}>📥 Export CSV</button>
         </div>
 
         <div style={{ background:"linear-gradient(90deg,#1a3c5e,#2563a8)", padding:"16px 20px", margin:"10px 14px", borderRadius:6, display:"flex", justifyContent:"space-between", alignItems:"center", flexWrap:"wrap", gap:10 }}>
@@ -166,7 +179,7 @@ export default function GeneralLedger() {
             {[
               { label:"Total Debit",   value:formatCurrency(totalDebits),  color:"#15803d", bg:"#dcfce7" },
               { label:"Total Credit",  value:formatCurrency(totalCredits), color:"#b91c1c", bg:"#fee2e2" },
-              { label:"Closing Balance", value:formatCurrency(closingBalance), color: closingBalance>=0?"#1d4ed8":"#b91c1c", bg: closingBalance>=0?"#dbeafe":"#fee2e2" },
+              { label:"Closing Balance", value:formatBalance(closingBalance).text, color: formatBalance(closingBalance).color, bg: formatBalance(closingBalance).color==="#dc2626"?"#fee2e2":"#dbeafe" },
               { label:"Entries", value:ledgerEntries.length, color:"#374151", bg:"#f3f4f6" },
             ].map(s => (
               <div key={s.label} style={{ flex:1, minWidth:110, background:s.bg, border:`1px solid ${s.color}30`, borderRadius:5, padding:"6px 12px", textAlign:"center" }}>
@@ -178,20 +191,22 @@ export default function GeneralLedger() {
         )}
 
         <div style={{ margin:"0 14px 20px", background:"#fff", border:"1px solid #d1d9e0", borderRadius:6, overflow:"hidden", boxShadow:"0 1px 4px rgba(0,0,0,0.06)" }}>
-          <div style={{ overflowX:"auto" }}>
-            <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12 }}>
+          <div className="gl-scroll" style={{ overflow:"auto", maxHeight:"calc(100vh - 330px)", minHeight:240 }}>
+            <table style={{ width:"100%", borderCollapse:"separate", borderSpacing:0, fontSize:12, minWidth:1100 }}>
               <thead>
-                <tr style={{ background:"linear-gradient(180deg,#2563a8,#1a4d8f)" }}>
-                  {["Sr#","Date","Voucher No.","GRN","Type","Description","Debit","Credit","Balance"].map((h,i) => (
-                    <th key={h} style={{ padding:"8px 10px", color:"#fff", fontWeight:600, textAlign: i>=6?"right":i===0?"center":"left", borderRight:"1px solid #1e40af", whiteSpace:"nowrap", fontSize:11 }}>{h}</th>
+                <tr>
+                  {["Sr#","Date","Voucher No.","GRN","Type","Narration","Sub Narration","Debit","Credit","Balance"].map((h,i) => (
+                    <th key={h} style={{ position:"sticky", top:0, zIndex:2, background:"#1f55a0", padding:"8px 10px", color:"#fff", fontWeight:600, textAlign: i>=7?"right":i===0?"center":"left", borderRight:"1px solid #1e40af", whiteSpace:"nowrap", fontSize:11 }}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {ledgerEntries.length === 0 ? (
-                  <tr><td colSpan={9} style={{ padding:32, textAlign:"center", color:"#6b7280" }}>{loading ? "⏳ Loading..." : `No transactions found for this period.`}</td></tr>
+                  <tr><td colSpan={10} style={{ padding:32, textAlign:"center", color:"#6b7280" }}>{loading ? "⏳ Loading..." : "No transactions found for this period."}</td></tr>
                 ) : ledgerEntries.map((entry, idx) => {
                   const [badgeBg, badgeText] = (VOUCHER_BADGE[entry.voucherType]||"#f1f5f9:#475569").split(":")
+                  const bal = formatBalance(entry.balance)
+                  const narr = entry.narration ?? entry.description
                   return (
                     <tr key={entry.id||idx} style={{ background: idx%2===0?"#fff":"#f7fafd", borderBottom:"1px solid #e5eaf0" }}>
                       <td style={{ padding:"5px 10px", textAlign:"center", color:"#94a3b8", fontFamily:"'Courier New',monospace", fontWeight:700 }}>{idx+1}</td>
@@ -203,27 +218,32 @@ export default function GeneralLedger() {
                       <td style={{ padding:"5px 10px" }}>
                         <span style={{ background:badgeBg, color:badgeText, padding:"2px 7px", borderRadius:10, fontSize:10, fontWeight:700 }}>{entry.voucherType}</span>
                       </td>
-                      <td style={{ padding:"5px 10px", maxWidth:280 }}>{entry.description}</td>
+                      <td style={{ padding:"5px 10px", maxWidth:260 }}>{narr || <span style={{ color:"#d1d5db" }}>—</span>}</td>
+                      <td style={{ padding:"5px 10px", maxWidth:240, color:"#475569" }}>{entry.subNarration || <span style={{ color:"#d1d5db" }}>—</span>}</td>
                       <td style={{ padding:"5px 10px", textAlign:"right", fontFamily:"'Courier New',monospace" }}>
                         {entry.debit>0 ? <span style={{ color:"#15803d", fontWeight:700 }}>{formatCurrency(entry.debit)}</span> : <span style={{ color:"#d1d5db" }}>—</span>}
                       </td>
                       <td style={{ padding:"5px 10px", textAlign:"right", fontFamily:"'Courier New',monospace" }}>
                         {entry.credit>0 ? <span style={{ color:"#b91c1c", fontWeight:700 }}>{formatCurrency(entry.credit)}</span> : <span style={{ color:"#d1d5db" }}>—</span>}
                       </td>
-                      <td style={{ padding:"5px 10px", textAlign:"right", fontFamily:"'Courier New',monospace" }}>
-                        <span style={{ fontWeight:700, color: entry.balance>=0?"#1d4ed8":"#dc2626" }}>{formatCurrency(entry.balance)}</span>
+                      <td style={{ padding:"5px 10px", textAlign:"right", fontFamily:"'Courier New',monospace", whiteSpace:"nowrap" }}>
+                        <span style={{ fontWeight:700, color:bal.color }}>{bal.text}</span>
                       </td>
                     </tr>
                   )
                 })}
-                {ledgerEntries.length > 0 && (
-                  <tr style={{ background:"linear-gradient(90deg,#1a3c5e,#2563a8)" }}>
-                    <td colSpan={6} style={{ padding:"8px 12px", color:"#fff", fontWeight:700, fontSize:12 }}>TOTAL</td>
-                    <td style={{ padding:"8px 10px", textAlign:"right", fontFamily:"'Courier New',monospace", color:"#6ee7b7", fontWeight:700, fontSize:13 }}>{formatCurrency(totalDebits)}</td>
-                    <td style={{ padding:"8px 10px", textAlign:"right", fontFamily:"'Courier New',monospace", color:"#fca5a5", fontWeight:700, fontSize:13 }}>{formatCurrency(totalCredits)}</td>
-                    <td style={{ padding:"8px 10px", textAlign:"right", fontFamily:"'Courier New',monospace", fontWeight:700, fontSize:13, color: closingBalance>=0?"#93c5fd":"#fca5a5" }}>{formatCurrency(closingBalance)}</td>
-                  </tr>
-                )}
+                {ledgerEntries.length > 0 && (() => {
+                  const cb = formatBalance(closingBalance)
+                  const tot = { position:"sticky", bottom:0, zIndex:1, background:"#1d4a85", padding:"8px 10px" }
+                  return (
+                    <tr>
+                      <td colSpan={7} style={{ ...tot, color:"#fff", fontWeight:700, fontSize:12, padding:"8px 12px" }}>TOTAL</td>
+                      <td style={{ ...tot, textAlign:"right", fontFamily:"'Courier New',monospace", color:"#6ee7b7", fontWeight:700, fontSize:13 }}>{formatCurrency(totalDebits)}</td>
+                      <td style={{ ...tot, textAlign:"right", fontFamily:"'Courier New',monospace", color:"#fca5a5", fontWeight:700, fontSize:13 }}>{formatCurrency(totalCredits)}</td>
+                      <td style={{ ...tot, textAlign:"right", fontFamily:"'Courier New',monospace", fontWeight:700, fontSize:13, whiteSpace:"nowrap", color: cb.color==="#dc2626"?"#fca5a5":"#93c5fd" }}>{cb.text}</td>
+                    </tr>
+                  )
+                })()}
               </tbody>
             </table>
           </div>
@@ -234,11 +254,11 @@ export default function GeneralLedger() {
 
   // ═══════════════════════ FORM VIEW ═════════════════════════════
   return (
-    <div style={{ minHeight:"100vh", display:"flex", alignItems:"center", justifyContent:"center", background:"#f0f4f8", padding:16, fontFamily:"'Segoe UI', Tahoma, Arial, sans-serif" }}>
-      <div style={{ width:"100%", maxWidth:700, background:"#fff", borderRadius:8, border:"1px solid #d1d9e0", boxShadow:"0 4px 24px rgba(0,0,0,0.10)", overflow:"hidden" }}>
+    <div style={{ minHeight:"100vh", display:"flex", alignItems:"flex-start", justifyContent:"center", background:"#f0f4f8", padding:24, fontFamily:"'Segoe UI', Tahoma, Arial, sans-serif" }}>
+      <div style={{ width:"100%", maxWidth:700, background:"#fff", borderRadius:8, border:"1px solid #d1d9e0", boxShadow:"0 4px 24px rgba(0,0,0,0.10)" }}>
 
         {/* Header */}
-        <div style={{ background:"linear-gradient(90deg,#1a3c5e,#2563a8)", padding:"14px 20px", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+        <div style={{ background:"linear-gradient(90deg,#1a3c5e,#2563a8)", padding:"14px 20px", display:"flex", justifyContent:"space-between", alignItems:"center", borderRadius:"8px 8px 0 0" }}>
           <div>
             <div style={{ fontSize:10, letterSpacing:"0.15em", color:"rgba(255,255,255,0.6)", fontFamily:"'Courier New',monospace", textTransform:"uppercase", marginBottom:2 }}>ACCOUNT WISE</div>
             <div style={{ fontSize:18, fontWeight:700, color:"#fff" }}>General Ledger</div>
@@ -319,7 +339,7 @@ export default function GeneralLedger() {
               )}
 
               {dropdownOpen && (
-                <div style={{ position:"absolute", top:"calc(100% + 4px)", left:0, right:0, zIndex:999, background:"#fff", border:"1px solid #c8d3de", borderRadius:5, boxShadow:"0 8px 24px rgba(0,0,0,0.12)", maxHeight:360, overflowY:"auto" }}>
+                <div style={{ position:"absolute", top:"calc(100% + 4px)", left:0, right:0, zIndex:999, background:"#fff", border:"1px solid #c8d3de", borderRadius:5, boxShadow:"0 8px 24px rgba(0,0,0,0.12)", maxHeight:300, overflowY:"auto", overscrollBehavior:"contain" }}>
                   {filteredAccounts.length === 0 ? (
                     <div style={{ padding:16, textAlign:"center", color:"#6b7280", fontSize:12 }}>No accounts found for "{searchQuery}"</div>
                   ) : Object.entries(groupedAccounts).map(([category, accounts]) => {
@@ -380,10 +400,14 @@ export default function GeneralLedger() {
   )
 }
 
-function exportCSV(entries, account, fromDate, toDate, formatDate, formatCurrency) {
+function exportCSV(entries, account, fromDate, toDate, formatDate, formatCurrency, formatBalance) {
+  const q = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`
   const csv = [
-    ["Sr#","Date","Voucher No","GRN","Type","Description","Debit","Credit","Balance"].join(","),
-    ...entries.map((e,i) => [i+1, formatDate(e.date), e.voucherNo, e.voucherType==="Purchase"&&e.grn?e.grn:"-", e.voucherType, `"${e.description}"`, formatCurrency(e.debit), formatCurrency(e.credit), formatCurrency(e.balance)].join(","))
+    ["Sr#","Date","Voucher No","GRN","Type","Narration","Sub Narration","Debit","Credit","Balance"].join(","),
+    ...entries.map((e,i) => [
+      i+1, formatDate(e.date), q(e.voucherNo), e.voucherType==="Purchase"&&e.grn?q(e.grn):"-", q(e.voucherType),
+      q(e.narration ?? e.description), q(e.subNarration || ""), q(formatCurrency(e.debit)), q(formatCurrency(e.credit)), q(formatBalance(e.balance).text),
+    ].join(","))
   ].join("\n")
   const a = document.createElement("a")
   a.href = URL.createObjectURL(new Blob([csv], { type:"text/csv" }))

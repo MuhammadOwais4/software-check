@@ -108,6 +108,7 @@ function AccountCodeCell({ value, accounts, onSelect }) {
 export default function JournalVoucher() {
   const [voucherNo, setVoucherNo] = useState("")
   const [voucherDate, setVoucherDate] = useState("")
+  const [narration, setNarration] = useState("")
   const [rows, setRows] = useState(initialRows())
   const [accountOptions, setAccountOptions] = useState([])
   const [loading, setLoading] = useState(false)
@@ -132,7 +133,7 @@ export default function JournalVoucher() {
   /* ---------- Print ---------- */
   const handlePrint = () => {
     if (!isBalanced) {
-      alert("Total Debit aur Total Credit equal hona zaroori hai.")
+      alert("Total Debit and Total Credit must be equal.")
       return
     }
     setShowPrintPreview(true)
@@ -228,6 +229,7 @@ export default function JournalVoucher() {
 
   const resetForm = () => {
     setRows(initialRows())
+    setNarration("")
     setVoucherNo(generateUniqueVoucherNo())
     setVoucherDate(new Date().toISOString().split("T")[0])
     setIsEditMode(false)
@@ -240,6 +242,7 @@ export default function JournalVoucher() {
     setEditingVoucherId(voucher._id)
     setVoucherNo(voucher.voucherNo)
     setVoucherDate(new Date(voucher.voucherDate).toISOString().split("T")[0])
+    setNarration(voucher.narration || "")
 
     const loaded = (voucher.entries || []).map((e, i) => {
       const [code, ...rest] = (e.account || "").split(" - ")
@@ -289,20 +292,20 @@ export default function JournalVoucher() {
   /* ---------- Save (with validations) ---------- */
   const validate = () => {
     const used = rows.filter((r) => r.accountCode || r.debit || r.credit)
-    if (used.length < 2) return "Kam az kam 2 entries honi chahiye."
+    if (used.length < 2) return "At least 2 entries are required."
 
     for (let i = 0; i < used.length; i++) {
       const r = used[i]
       const n = i + 1
-      if (!r.accountCode || !r.accountName) return `Row ${n}: Account select karo.`
+      if (!r.accountCode || !r.accountName) return `Row ${n}: Select an account.`
       const hasDr = toCents(r.debit) > 0
       const hasCr = toCents(r.credit) > 0
-      if (!hasDr && !hasCr) return `Row ${n}: Debit ya Credit amount daalo.`
-      if (hasDr && hasCr) return `Row ${n}: Debit aur Credit dono ek saath nahi ho sakte.`
+      if (!hasDr && !hasCr) return `Row ${n}: Enter a Debit or Credit amount.`
+      if (hasDr && hasCr) return `Row ${n}: Debit and Credit cannot both be entered on the same row.`
     }
 
     if (toCents(totalDebit) !== toCents(totalCredit)) {
-      return `Total Debit (${formatAmount(totalDebit)}) aur Total Credit (${formatAmount(totalCredit)}) equal nahi hain. Difference: ${formatAmount(Math.abs(diffCents) / 100)}`
+      return `Total Debit (${formatAmount(totalDebit)}) and Total Credit (${formatAmount(totalCredit)}) are not equal. Difference: ${formatAmount(Math.abs(diffCents) / 100)}`
     }
     return null
   }
@@ -333,7 +336,7 @@ export default function JournalVoucher() {
       }
     })
 
-    const narration = (entries.find((e) => e.description)?.description || "Journal Voucher").trim()
+    const voucherNarration = (narration || "").trim() || "Journal Voucher"
 
     try {
       setSaving(true)
@@ -341,7 +344,7 @@ export default function JournalVoucher() {
         voucherNo,
         voucherType: "JV",
         voucherDate: new Date(voucherDate),
-        narration,
+        narration: voucherNarration,
         entries,
       }
 
@@ -516,6 +519,19 @@ export default function JournalVoucher() {
                 </div>
               </div>
 
+              <div className="space-y-2 mb-4">
+                <Label htmlFor="voucher-narration" className="text-sm font-semibold text-gray-700">
+                  Narration
+                </Label>
+                <Input
+                  id="voucher-narration"
+                  value={narration}
+                  onChange={(e) => setNarration(e.target.value)}
+                  placeholder="Voucher narration (applies to the whole voucher)"
+                  className="border-gray-300"
+                />
+              </div>
+
               <div className="mb-3 flex justify-between items-center">
                 <Button
                   onClick={loadAllAccounts}
@@ -540,7 +556,7 @@ export default function JournalVoucher() {
                       <th className="px-2 py-3 border-r border-gray-200 w-32">Credit</th>
                       <th className="px-2 py-3 border-r border-gray-200 w-32">Cheque No</th>
                       <th className="px-2 py-3 border-r border-gray-200 w-36">Cheque Date</th>
-                      <th className="px-2 py-3 border-r border-gray-200">Remarks</th>
+                      <th className="px-2 py-3 border-r border-gray-200">Sub Narration</th>
                       <th className="px-2 py-3 w-14">Rem</th>
                     </tr>
                   </thead>
@@ -611,7 +627,7 @@ export default function JournalVoucher() {
                           <Input
                             value={r.remarks}
                             onChange={(e) => updateRow(r.id, { remarks: e.target.value })}
-                            placeholder="Remarks"
+                            placeholder="Sub narration"
                             className="h-9 text-sm border-gray-300"
                           />
                         </td>
@@ -620,7 +636,7 @@ export default function JournalVoucher() {
                             type="button"
                             onClick={() => removeRow(r.id)}
                             disabled={rows.length <= 2}
-                            title={rows.length <= 2 ? "Kam az kam 2 rows chahiye" : "Remove row"}
+                            title={rows.length <= 2 ? "At least 2 rows are required" : "Remove row"}
                             className="inline-flex items-center justify-center w-7 h-7 border border-red-500 text-red-500 rounded hover:bg-red-50 disabled:opacity-40 disabled:cursor-not-allowed"
                           >
                             <X className="w-4 h-4" />
@@ -667,8 +683,8 @@ export default function JournalVoucher() {
                   <div className="flex items-center gap-2 bg-red-100 text-red-800 border border-red-300 px-3 py-1.5 rounded-md text-sm font-medium">
                     <AlertTriangle className="w-4 h-4" />
                     {toCents(totalDebit) === 0 && toCents(totalCredit) === 0
-                      ? "Amount daalo — Debit aur Credit equal hona zaroori hai"
-                      : `Not equal — Difference: ${formatAmount(Math.abs(diffCents) / 100)} (${diffCents > 0 ? "Credit kam" : "Debit kam"})`}
+                      ? "Enter amounts — Debit and Credit must be equal"
+                      : `Not equal — Difference: ${formatAmount(Math.abs(diffCents) / 100)} (${diffCents > 0 ? "Credit is short" : "Debit is short"})`}
                   </div>
                 )}
               </div>
@@ -720,6 +736,11 @@ export default function JournalVoucher() {
               </div>
             </section>
 
+            <div className="text-xs mb-2">
+              <span className="font-semibold">Narration: </span>
+              {narration || "-"}
+            </div>
+
             <table className="w-full border-collapse text-xs mb-6">
               <thead>
                 <tr>
@@ -731,7 +752,7 @@ export default function JournalVoucher() {
                   <th className="border border-gray-400 px-1.5 py-1 text-right">Credit</th>
                   <th className="border border-gray-400 px-1.5 py-1 text-left">Cheque No</th>
                   <th className="border border-gray-400 px-1.5 py-1 text-left">Cheque Date</th>
-                  <th className="border border-gray-400 px-1.5 py-1 text-left">Remarks</th>
+                  <th className="border border-gray-400 px-1.5 py-1 text-left">Sub Narration</th>
                 </tr>
               </thead>
               <tbody>
