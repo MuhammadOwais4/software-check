@@ -127,12 +127,19 @@ export default function GeneralLedger() {
   const totalDebits  = ledgerEntries.reduce((s, e) => s + e.debit,  0)
   const totalCredits = ledgerEntries.reduce((s, e) => s + e.credit, 0)
 
-  // Balance is stored relative to the account's normal side. Convert to a Dr / Cr display:
-  //   Debit balance  -> 46,000 Dr
-  //   Credit balance -> (-46,000) Cr
-  const formatBalance = (balance) => {
-    const b = parseFloat(balance || 0)
-    const net = normalBalance === "debit" ? b : -b
+  // Dr / Cr is worked out from the entries themselves (debit minus credit, running):
+  //   more debit  -> 46,000 Dr
+  //   more credit -> (-46,000) Cr
+  const runningNets = (() => {
+    let acc = 0
+    return ledgerEntries.map((e) => {
+      acc = Math.round((acc + (parseFloat(e.debit) || 0) - (parseFloat(e.credit) || 0)) * 100) / 100
+      return acc
+    })
+  })()
+  const closingNet = Math.round((totalDebits - totalCredits) * 100) / 100
+
+  const formatBalance = (net) => {
     if (Math.abs(net) < 0.005) return { text: "0", color: "#374151" }
     if (net > 0) return { text: `${formatCurrency(net)} Dr`, color: "#1d4ed8" }
     return { text: `(-${formatCurrency(Math.abs(net))}) Cr`, color: "#dc2626" }
@@ -153,7 +160,7 @@ export default function GeneralLedger() {
           <button onClick={handleClose} style={btnStyle("default")}>← Back</button>
           <button onClick={() => loadLedgerEntries(selectedAccount, fromDate, toDate)} disabled={loading} style={btnStyle("primary")}>{loading ? "⏳..." : "🔄 Refresh"}</button>
           <button onClick={() => window.print()} style={btnStyle("success")}>🖨️ Print</button>
-          <button onClick={() => exportCSV(ledgerEntries, selectedAccount, fromDate, toDate, formatDate, formatCurrency, formatBalance)} style={btnStyle("default")}>📥 Export CSV</button>
+          <button onClick={() => exportCSV(ledgerEntries, selectedAccount, fromDate, toDate, formatDate, formatCurrency, formatBalance, runningNets)} style={btnStyle("default")}>📥 Export CSV</button>
         </div>
 
         <div style={{ background:"linear-gradient(90deg,#1a3c5e,#2563a8)", padding:"16px 20px", margin:"10px 14px", borderRadius:6, display:"flex", justifyContent:"space-between", alignItems:"center", flexWrap:"wrap", gap:10 }}>
@@ -179,7 +186,7 @@ export default function GeneralLedger() {
             {[
               { label:"Total Debit",   value:formatCurrency(totalDebits),  color:"#15803d", bg:"#dcfce7" },
               { label:"Total Credit",  value:formatCurrency(totalCredits), color:"#b91c1c", bg:"#fee2e2" },
-              { label:"Closing Balance", value:formatBalance(closingBalance).text, color: formatBalance(closingBalance).color, bg: formatBalance(closingBalance).color==="#dc2626"?"#fee2e2":"#dbeafe" },
+              { label:"Closing Balance", value:formatBalance(closingNet).text, color: formatBalance(closingNet).color, bg: formatBalance(closingNet).color==="#dc2626"?"#fee2e2":"#dbeafe" },
               { label:"Entries", value:ledgerEntries.length, color:"#374151", bg:"#f3f4f6" },
             ].map(s => (
               <div key={s.label} style={{ flex:1, minWidth:110, background:s.bg, border:`1px solid ${s.color}30`, borderRadius:5, padding:"6px 12px", textAlign:"center" }}>
@@ -205,7 +212,7 @@ export default function GeneralLedger() {
                   <tr><td colSpan={10} style={{ padding:32, textAlign:"center", color:"#6b7280" }}>{loading ? "⏳ Loading..." : "No transactions found for this period."}</td></tr>
                 ) : ledgerEntries.map((entry, idx) => {
                   const [badgeBg, badgeText] = (VOUCHER_BADGE[entry.voucherType]||"#f1f5f9:#475569").split(":")
-                  const bal = formatBalance(entry.balance)
+                  const bal = formatBalance(runningNets[idx])
                   const narr = entry.narration ?? entry.description
                   return (
                     <tr key={entry.id||idx} style={{ background: idx%2===0?"#fff":"#f7fafd", borderBottom:"1px solid #e5eaf0" }}>
@@ -233,7 +240,7 @@ export default function GeneralLedger() {
                   )
                 })}
                 {ledgerEntries.length > 0 && (() => {
-                  const cb = formatBalance(closingBalance)
+                  const cb = formatBalance(closingNet)
                   const tot = { position:"sticky", bottom:0, zIndex:1, background:"#1d4a85", padding:"8px 10px" }
                   return (
                     <tr>
@@ -400,13 +407,13 @@ export default function GeneralLedger() {
   )
 }
 
-function exportCSV(entries, account, fromDate, toDate, formatDate, formatCurrency, formatBalance) {
+function exportCSV(entries, account, fromDate, toDate, formatDate, formatCurrency, formatBalance, runningNets) {
   const q = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`
   const csv = [
     ["Sr#","Date","Voucher No","GRN","Type","Narration","Sub Narration","Debit","Credit","Balance"].join(","),
     ...entries.map((e,i) => [
       i+1, formatDate(e.date), q(e.voucherNo), e.voucherType==="Purchase"&&e.grn?q(e.grn):"-", q(e.voucherType),
-      q(e.narration ?? e.description), q(e.subNarration || ""), q(formatCurrency(e.debit)), q(formatCurrency(e.credit)), q(formatBalance(e.balance).text),
+      q(e.narration ?? e.description), q(e.subNarration || ""), q(formatCurrency(e.debit)), q(formatCurrency(e.credit)), q(formatBalance(runningNets[i]).text),
     ].join(","))
   ].join("\n")
   const a = document.createElement("a")

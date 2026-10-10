@@ -16,10 +16,21 @@ import CashReceiptVoucher from "@/pages/Accounts/Cash-Receipt-Voucher/Cash-Recei
 import BankPaymentVoucher from "@/pages/Accounts/Bank-Payment-Voucher/Bank-Payment-Voucher";
 import BankReceiptVoucher from "@/pages/Accounts/Bank-Receipt-Voucher/Bank-Receipt-Voucher";
 import JournalVoucher from "@/pages/Accounts/Journal-Voucher/Journal-Voucher";
+import GeneralLedger from "@/pages/Accounts/Genreal-Leager/Genreal-Leager";
+import TrialBalance from "@/pages/Accounts/TrialBalance/TrialBalance";
+import JVAccountReport from "@/pages/reports/JV-Account-Report/JV-Account-Report";
+import JVDetail from "@/pages/reports/JV-Account-Report/JV-Detail";
+import UsersShops from "@/pages/Users-Shops/Users-Shops";
 import Dashboard from "@/pages/Dashboard/Dashboard.jsx";
 import ShopSwitcher from "@/components/components/ShopSwitcher";
 import ChangePassword from "@/components/components/ChangePassword";
 import Icon from "@/assets/icon.png";
+
+const REPORT_ITEMS = [
+  { key: "General Ledger",    label: "General Ledger" },
+  { key: "Trial Balance",     label: "Trial Balance" },
+  { key: "JV Account Report", label: "JV Account Report" },
+];
 
 const ACCOUNT_ITEMS = [
   { key: "Cash Payment Voucher", label: "Cash Payment Voucher" },
@@ -40,9 +51,11 @@ export default function UserDashboard() {
   const [products,      setProducts]      = useState([]);
   const [sales,         setSales]         = useState([]);
   const [notifications, setNotifications] = useState([]);
+  const [reportsOpen,   setReportsOpen]   = useState(false);
   const [accountsOpen,  setAccountsOpen]  = useState(false);
   const [chartOpen,     setChartOpen]     = useState(false);
 
+  const reportsRef  = useRef(null);
   const accountsRef = useRef(null);
   const chartRef    = useRef(null);
 
@@ -59,6 +72,7 @@ export default function UserDashboard() {
 
   useEffect(() => {
     function onOutside(e) {
+      if (reportsRef.current  && !reportsRef.current.contains(e.target))  setReportsOpen(false);
       if (accountsRef.current && !accountsRef.current.contains(e.target)) setAccountsOpen(false);
       if (chartRef.current    && !chartRef.current.contains(e.target))    setChartOpen(false);
     }
@@ -66,6 +80,7 @@ export default function UserDashboard() {
     return () => document.removeEventListener("mousedown", onOutside);
   }, []);
 
+  const isReportActive  = REPORT_ITEMS.some(r => r.key === activeTab) || activeTab.startsWith("JV Detail:");
   const isAccountActive = ACCOUNT_ITEMS.some(a => a.key === activeTab);
 
   const NavBtn = ({ tab, label }) => (
@@ -113,6 +128,38 @@ export default function UserDashboard() {
             <NavBtn tab="dashboard" label="Dashboard" />
             <NavBtn tab="stock"     label="Goods Receipt Note" />
             <NavBtn tab="sales"     label="Sales Tracking" />
+
+            <NavBtn tab="users-shops" label="Users & Shops" />
+
+            {/* Reports */}
+            <div className="relative" ref={reportsRef}>
+              <button
+                className={`whitespace-nowrap py-4 px-3 border-b-2 font-medium text-sm flex items-center gap-1 transition-colors ${
+                  isReportActive
+                    ? "border-emerald-500 text-emerald-600"
+                    : "border-transparent text-gray-500 hover:text-gray-700"
+                }`}
+                onClick={() => setReportsOpen(p => !p)}
+              >
+                Reports
+                <svg className={`w-4 h-4 transition-transform ${reportsOpen ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              {reportsOpen && (
+                <div className="absolute left-0 mt-1 w-56 bg-white border border-gray-200 rounded-lg shadow-2xl z-50 py-1">
+                  {REPORT_ITEMS.map(item => (
+                    <button
+                      key={item.key}
+                      className="block w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-emerald-50 hover:text-emerald-700"
+                      onClick={() => { setActiveTab(item.key); setReportsOpen(false); }}
+                    >
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
 
             {/* Chart of Accounts */}
             <div className="relative" ref={chartRef}>
@@ -196,6 +243,16 @@ export default function UserDashboard() {
         {activeTab === "dashboard"            && <Dashboard products={products} sales={sales} notifications={notifications} onTabChange={setActiveTab} />}
         {activeTab === "stock"                && <StockManagement onStockUpdate={setProducts} onNotification={n => setNotifications(p => [...p, n])} />}
         {activeTab === "sales"                && <SalesTracking products={products} onSaleComplete={setSales} onNotification={n => setNotifications(p => [...p, n])} />}
+        {activeTab === "users-shops"          && <UsersShops />}
+        {activeTab === "General Ledger"       && <GeneralLedger />}
+        {activeTab === "Trial Balance"        && <TrialBalance />}
+        {activeTab === "JV Account Report"    && <JVAccountReport onOpenJV={(id) => setActiveTab("JV Detail:" + id)} />}
+        {activeTab.startsWith("JV Detail:")   && (
+          <JVDetail
+            id={activeTab.slice("JV Detail:".length)}
+            onBack={() => setActiveTab("JV Account Report")}
+          />
+        )}
         {activeTab === "chart-of-accounts"    && (
           <>
             {chartPage === "assets"      && <AssetsPage />}
