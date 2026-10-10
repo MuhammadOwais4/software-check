@@ -35,7 +35,7 @@ export default function UsersShops() {
     try {
       await axios.post(`${API_BASE_URL}/shops`, shopForm);
       setShopForm({ name: "", address: "" });
-      flash(true, "Shop ban gayi");
+      flash(true, "Shop created");
       window.dispatchEvent(new Event("shops:changed"));
       load();
     } catch (e2) { err(e2); }
@@ -47,13 +47,13 @@ export default function UsersShops() {
       const body = { ...userForm, shopId: userForm.role === "user" ? userForm.shopId : undefined };
       await axios.post(`${API_BASE_URL}/auth/signup`, body);
       setUserForm({ username: "", email: "", password: "", role: "user", shopId: "" });
-      flash(true, "User ban gaya");
+      flash(true, "User created");
       load();
     } catch (e2) { err(e2); }
   };
 
   const resetPassword = async (u) => {
-    const pw = window.prompt(`${u.username} ka naya password (kam az kam 6 characters):`);
+    const pw = window.prompt(`New password for ${u.username} (minimum 6 characters):`);
     if (!pw) return;
     try {
       const { data } = await axios.put(`${API_BASE_URL}/auth/users/${u._id}/password`, { newPassword: pw });
@@ -63,7 +63,7 @@ export default function UsersShops() {
 
   const copyChart = async (toId, fromId) => {
     if (!fromId) return;
-    if (!window.confirm("Chart of Accounts copy karna hai? (jo codes pehle se hain wo skip honge)")) return;
+    if (!window.confirm("Copy the Chart of Accounts? (Codes that already exist will be skipped)")) return;
     try {
       const { data } = await axios.post(`${API_BASE_URL}/shops/${toId}/copy-chart`, { fromShopId: fromId });
       flash(true, data.message);
@@ -78,7 +78,7 @@ export default function UsersShops() {
   };
 
   const changeShop = async (u, shopId) => {
-    try { await axios.put(`${API_BASE_URL}/auth/users/${u._id}`, { shopId }); flash(true, "Shop change ho gayi"); load(); }
+    try { await axios.put(`${API_BASE_URL}/auth/users/${u._id}`, { shopId }); flash(true, "Shop changed"); load(); }
     catch (e) { err(e); }
   };
 
@@ -86,14 +86,14 @@ export default function UsersShops() {
     try {
       await axios.put(`${API_BASE_URL}/shops/${editShop._id}`, { name: editShop.name, address: editShop.address });
       setEditShop(null);
-      flash(true, "Shop update ho gayi");
+      flash(true, "Shop updated");
       window.dispatchEvent(new Event("shops:changed"));
       load();
     } catch (e) { err(e); }
   };
 
   const deleteShop = async (s) => {
-    if (!window.confirm(`${s.name} ko delete karna hai? Ye wapas nahi hoga.`)) return;
+    if (!window.confirm(`Delete ${s.name}? This cannot be undone.`)) return;
     try {
       const { data } = await axios.delete(`${API_BASE_URL}/shops/${s._id}`);
       flash(true, data.message);
@@ -106,13 +106,13 @@ export default function UsersShops() {
     try {
       await axios.put(`${API_BASE_URL}/auth/users/${editing._id}`, { username: editing.username, email: editing.email });
       setEditing(null);
-      flash(true, "User update ho gaya");
+      flash(true, "User updated");
       load();
     } catch (e) { err(e); }
   };
 
   const deleteUser = async (u) => {
-    if (!window.confirm(`${u.username} ko delete karna hai? Ye wapas nahi hoga.`)) return;
+    if (!window.confirm(`Delete ${u.username}? This cannot be undone.`)) return;
     try {
       const { data } = await axios.delete(`${API_BASE_URL}/auth/users/${u._id}`);
       flash(true, data.message);
@@ -140,7 +140,7 @@ export default function UsersShops() {
             <input className={input} placeholder="Address (optional)" value={shopForm.address} onChange={(e) => setShopForm({ ...shopForm, address: e.target.value })} />
             <button className={`${btn} bg-blue-600 text-white whitespace-nowrap`}>Add Shop</button>
           </form>
-          <button onClick={fixDatabase} className={`${btn} bg-gray-800 text-white mb-3`}>Fix Database (naye shop ke liye ek baar)</button>
+          <button onClick={fixDatabase} className={`${btn} bg-gray-800 text-white mb-3`}>Fix Database (run once for new shops)</button>
           <ul className="divide-y divide-gray-100">
             {shops.map((s) => (
               <li key={s._id} className="py-2 flex justify-between items-center gap-2 text-sm">
@@ -150,7 +150,7 @@ export default function UsersShops() {
                   className="border border-gray-300 rounded-lg px-2 py-1 text-xs"
                   value=""
                   onChange={(e) => copyChart(s._id, e.target.value)}
-                  title="Doosri shop se Chart of Accounts copy karo"
+                  title="Copy Chart of Accounts from another shop"
                 >
                   <option value="">Chart copy from…</option>
                   {shops.filter((x) => x._id !== s._id).map((x) => <option key={x._id} value={x._id}>{x.name}</option>)}
@@ -160,7 +160,7 @@ export default function UsersShops() {
                 </span>
               </li>
             ))}
-            {shops.length === 0 && <li className="py-2 text-sm text-gray-500">Abhi koi shop nahi — pehle shop banao.</li>}
+            {shops.length === 0 && <li className="py-2 text-sm text-gray-500">No shops yet. Create a shop first.</li>}
           </ul>
         </div>
 
@@ -172,12 +172,12 @@ export default function UsersShops() {
             <input className={input} placeholder="Email" type="email" value={userForm.email} onChange={(e) => setUserForm({ ...userForm, email: e.target.value })} required />
             <input className={input} placeholder="Password (min 6)" type="password" value={userForm.password} onChange={(e) => setUserForm({ ...userForm, password: e.target.value })} required />
             <select className={input} value={userForm.role} onChange={(e) => setUserForm({ ...userForm, role: e.target.value })}>
-              <option value="user">User (ek shop)</option>
-              {isDev && <option value="admin">Admin (sab shops)</option>}
+              <option value="user">User (one shop)</option>
+              {isDev && <option value="admin">Admin (all shops)</option>}
             </select>
             {userForm.role === "user" && (
               <select className={`${input} col-span-2`} value={userForm.shopId} onChange={(e) => setUserForm({ ...userForm, shopId: e.target.value })} required>
-                <option value="">— Shop select karo —</option>
+                <option value="">— Select shop —</option>
                 {shops.map((s) => <option key={s._id} value={s._id}>{s.name}</option>)}
               </select>
             )}
