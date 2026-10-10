@@ -12,6 +12,7 @@ export default function UsersShops() {
   const { user: me } = useAuth();
   const isDev = me?.role === "developer";
   const [msg, setMsg] = useState(null);
+  const [editShop, setEditShop] = useState(null); // { _id, name, address }
   const [editing, setEditing] = useState(null); // { _id, username, email }
 
   const [shopForm, setShopForm] = useState({ name: "", address: "" });
@@ -81,6 +82,26 @@ export default function UsersShops() {
     catch (e) { err(e); }
   };
 
+  const saveShop = async () => {
+    try {
+      await axios.put(`${API_BASE_URL}/shops/${editShop._id}`, { name: editShop.name, address: editShop.address });
+      setEditShop(null);
+      flash(true, "Shop update ho gayi");
+      window.dispatchEvent(new Event("shops:changed"));
+      load();
+    } catch (e) { err(e); }
+  };
+
+  const deleteShop = async (s) => {
+    if (!window.confirm(`${s.name} ko delete karna hai? Ye wapas nahi hoga.`)) return;
+    try {
+      const { data } = await axios.delete(`${API_BASE_URL}/shops/${s._id}`);
+      flash(true, data.message);
+      window.dispatchEvent(new Event("shops:changed"));
+      load();
+    } catch (e) { err(e); }
+  };
+
   const saveEdit = async () => {
     try {
       await axios.put(`${API_BASE_URL}/auth/users/${editing._id}`, { username: editing.username, email: editing.email });
@@ -123,7 +144,8 @@ export default function UsersShops() {
           <ul className="divide-y divide-gray-100">
             {shops.map((s) => (
               <li key={s._id} className="py-2 flex justify-between items-center gap-2 text-sm">
-                <span className="font-medium">{s.name}</span>
+                <span className="font-medium">{s.name}{s.address ? <span className="text-xs text-gray-500 font-normal"> · {s.address}</span> : null}</span>
+                <span className="flex items-center gap-2">
                 <select
                   className="border border-gray-300 rounded-lg px-2 py-1 text-xs"
                   value=""
@@ -133,6 +155,9 @@ export default function UsersShops() {
                   <option value="">Chart copy from…</option>
                   {shops.filter((x) => x._id !== s._id).map((x) => <option key={x._id} value={x._id}>{x.name}</option>)}
                 </select>
+                <button onClick={() => setEditShop({ _id: s._id, name: s.name, address: s.address || "" })} className={`${btn} border border-blue-300 text-blue-700 hover:bg-blue-50 !py-1 !text-xs`}>Edit</button>
+                <button onClick={() => deleteShop(s)} className={`${btn} border border-red-300 text-red-700 hover:bg-red-50 !py-1 !text-xs`}>Delete</button>
+                </span>
               </li>
             ))}
             {shops.length === 0 && <li className="py-2 text-sm text-gray-500">Abhi koi shop nahi — pehle shop banao.</li>}
@@ -201,6 +226,20 @@ export default function UsersShops() {
           </tbody>
         </table>
       </div>
+
+      {editShop && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-5 w-full max-w-sm space-y-3">
+            <h3 className="text-lg font-bold">Edit Shop</h3>
+            <input className={input} placeholder="Shop name" value={editShop.name} onChange={(e) => setEditShop({ ...editShop, name: e.target.value })} />
+            <input className={input} placeholder="Address (optional)" value={editShop.address} onChange={(e) => setEditShop({ ...editShop, address: e.target.value })} />
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setEditShop(null)} className={`${btn} border border-gray-300`}>Cancel</button>
+              <button onClick={saveShop} className={`${btn} bg-blue-600 text-white`}>Save</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {editing && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">

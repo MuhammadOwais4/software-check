@@ -89,12 +89,44 @@ router.put('/:id', requireRole('admin', 'developer'), async (req, res) => {
     const { name, code, address, isActive } = req.body;
     const shop = await Shop.findById(req.params.id);
     if (!shop) return res.status(404).json({ message: 'Shop not found' });
-    if (name !== undefined) shop.name = name.trim();
+    if (name !== undefined) {
+      const n = name.trim();
+      if (!n) return res.status(400).json({ message: 'Shop name zaroori hai' });
+      if (await Shop.findOne({ name: n, _id: { $ne: shop._id } })) return res.status(400).json({ message: 'Is naam ki shop pehle se hai' });
+      shop.name = n;
+    }
     if (code !== undefined) shop.code = code;
     if (address !== undefined) shop.address = address;
     if (isActive !== undefined) shop.isActive = !!isActive;
     await shop.save();
     res.json(shop);
+  } catch (e) {
+    res.status(500).json({ message: e.message });
+  }
+});
+
+// Shop delete: sirf tab jab us shop ka koi user ya koi transaction/data na ho.
+// (Chart of Accounts khali shop ke saath hi hat jata hai.)
+router.delete('/:id', requireRole('admin', 'developer'), async (req, res) => {
+  try {
+    if (!mongoose.isValidObjectId(req.params.id)) return res.status(400).json({ message: 'Shop galat hai' });
+    const shop = await Shop.findById(req.params.id);
+    if (!shop) return res.status(404).json({ message: 'Shop not found' });
+    const sid = shop._id;
+    const CHART = ['Asset', 'Equity', 'Expense', 'Liability', 'Revenue'];
+
+    const users = await mongoose.model('User').countDocuments({ shopId: sid });
+    if (users > 0) return res.status(400).json({ message: `Is shop me ${users} user hain. Pehle unki shop badlo ya unhe hatao.` });
+
+    for (const name of mongoose.modelNames()) {
+      if (['Shop', 'User', ...CHART].includes(name)) continue;
+      const n = await mongoose.model(name).collection.countDocuments({ shopId: sid });
+      if (n > 0) return res.status(400).json({ message: `Is shop ka data maujood hai (${name}: ${n}), isliye delete nahi ho sakti.` });
+    }
+
+    for (const name of CHART) await mongoose.model(name).collection.deleteMany({ shopId: sid });
+    await Shop.deleteOne({ _id: sid });
+    res.json({ message: `${shop.name} delete ho gayi` });
   } catch (e) {
     res.status(500).json({ message: e.message });
   }
