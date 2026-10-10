@@ -15,6 +15,7 @@ import CashPaymentVoucher from "@/pages/Accounts/Cash-Payment-Voucher/Cash-Payme
 import CashReceiptVoucher from "@/pages/Accounts/Cash-Receipt-Voucher/Cash-Receipt-Voucher";
 import BankPaymentVoucher from "@/pages/Accounts/Bank-Payment-Voucher/Bank-Payment-Voucher";
 import BankReceiptVoucher from "@/pages/Accounts/Bank-Receipt-Voucher/Bank-Receipt-Voucher";
+import JournalVoucher from "@/pages/Accounts/Journal-Voucher/Journal-Voucher";
 import Dashboard from "@/pages/Dashboard/Dashboard.jsx";
 import ShopSwitcher from "@/components/components/ShopSwitcher";
 import ChangePassword from "@/components/components/ChangePassword";
@@ -25,6 +26,7 @@ const ACCOUNT_ITEMS = [
   { key: "Cash Receipt Voucher", label: "Cash Receipt Voucher" },
   { key: "Bank Payment Voucher", label: "Bank Payment Voucher" },
   { key: "Bank Receipt Voucher", label: "Bank Receipt Voucher" },
+  { key: "Journal Voucher",      label: "Journal Voucher" },
 ];
 
 const CHART_PAGES = ["assets", "liabilities", "equity", "revenue", "expenses"];
@@ -207,6 +209,7 @@ export default function UserDashboard() {
         {activeTab === "Cash Receipt Voucher" && <CashReceiptVoucher />}
         {activeTab === "Bank Payment Voucher" && <BankPaymentVoucher />}
         {activeTab === "Bank Receipt Voucher" && <BankReceiptVoucher />}
+        {activeTab === "Journal Voucher"      && <JournalVoucher />}
         {activeTab === "notifications"        && (
           <Notifications
             notifications={notifications}
