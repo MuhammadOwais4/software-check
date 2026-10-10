@@ -56,6 +56,22 @@ export default function UsersShops() {
     } catch (e) { err(e); }
   };
 
+  const copyChart = async (toId, fromId) => {
+    if (!fromId) return;
+    if (!window.confirm("Chart of Accounts copy karna hai? (jo codes pehle se hain wo skip honge)")) return;
+    try {
+      const { data } = await axios.post(`${API_BASE_URL}/shops/${toId}/copy-chart`, { fromShopId: fromId });
+      flash(true, data.message);
+    } catch (e) { err(e); }
+  };
+
+  const fixDatabase = async () => {
+    try {
+      const { data } = await axios.post(`${API_BASE_URL}/shops/fix-indexes`);
+      flash(true, data.message);
+    } catch (e) { err(e); }
+  };
+
   const changeShop = async (u, shopId) => {
     try { await axios.put(`${API_BASE_URL}/auth/users/${u._id}`, { shopId }); flash(true, "Shop change ho gayi"); load(); }
     catch (e) { err(e); }
@@ -81,11 +97,20 @@ export default function UsersShops() {
             <input className={input} placeholder="Address (optional)" value={shopForm.address} onChange={(e) => setShopForm({ ...shopForm, address: e.target.value })} />
             <button className={`${btn} bg-blue-600 text-white whitespace-nowrap`}>Add Shop</button>
           </form>
+          <button onClick={fixDatabase} className={`${btn} bg-gray-800 text-white mb-3`}>Fix Database (naye shop ke liye ek baar)</button>
           <ul className="divide-y divide-gray-100">
             {shops.map((s) => (
-              <li key={s._id} className="py-2 flex justify-between text-sm">
+              <li key={s._id} className="py-2 flex justify-between items-center gap-2 text-sm">
                 <span className="font-medium">{s.name}</span>
-                <span className="text-gray-500">{s.address}</span>
+                <select
+                  className="border border-gray-300 rounded-lg px-2 py-1 text-xs"
+                  value=""
+                  onChange={(e) => copyChart(s._id, e.target.value)}
+                  title="Doosri shop se Chart of Accounts copy karo"
+                >
+                  <option value="">Chart copy from…</option>
+                  {shops.filter((x) => x._id !== s._id).map((x) => <option key={x._id} value={x._id}>{x.name}</option>)}
+                </select>
               </li>
             ))}
             {shops.length === 0 && <li className="py-2 text-sm text-gray-500">Abhi koi shop nahi — pehle shop banao.</li>}
