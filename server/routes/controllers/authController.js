@@ -15,7 +15,7 @@ exports.signup = async (req, res) => {
     // Only an admin/developer can create users. (Exception: very first user of a fresh database.)
     const totalUsers = await User.countDocuments();
     if (totalUsers > 0 && !isAdmin(req)) {
-      return res.status(403).json({ message: 'Sirf admin naya user bana sakta hai' });
+      return res.status(403).json({ message: 'Permission denied' });
     }
 
     if (!username || !email || !password) {
@@ -35,16 +35,16 @@ exports.signup = async (req, res) => {
     }
     const finalRole = role || 'user';
     if (finalRole === 'developer') {
-      return res.status(403).json({ message: 'Developer account yahan se nahi ban sakta' });
+      return res.status(403).json({ message: 'Permission denied' });
     }
     if (finalRole === 'admin' && totalUsers > 0 && !isDeveloper(req)) {
-      return res.status(403).json({ message: 'Admin sirf developer bana sakta hai' });
+      return res.status(403).json({ message: 'Permission denied' });
     }
 
     let finalShop = null;
     if (finalRole === 'user') {
       if (!shopId || !mongoose.isValidObjectId(shopId) || !(await Shop.findById(shopId))) {
-        return res.status(400).json({ message: 'Shop select karo (user ke liye shop zaroori hai)' });
+        return res.status(400).json({ message: 'Permission denied' });
       }
       finalShop = shopId;
     }
@@ -148,7 +148,7 @@ exports.resetPassword = async (req, res) => {
     }
     const user = await User.findById(req.params.id);
     if (!user) return res.status(404).json({ message: 'User not found' });
-    if (user.role === 'developer' && !isDeveloper(req)) return res.status(403).json({ message: 'Allowed nahi' });
+    if (user.role === 'developer' && !isDeveloper(req)) return res.status(403).json({ message: 'Edit only developer allowed' });
     user.password = await bcrypt.hash(newPassword, 12);
     await user.save();
     res.json({ message: `${user.username} ka password change ho gaya` });
@@ -163,10 +163,10 @@ exports.updateUser = async (req, res) => {
     const { shopId, isActive, username, email } = req.body;
     const user = await User.findById(req.params.id);
     if (!user) return res.status(404).json({ message: 'User not found' });
-    if (user.role === 'developer' && !isDeveloper(req)) return res.status(403).json({ message: 'Allowed nahi' });
+    if (user.role === 'developer' && !isDeveloper(req)) return res.status(403).json({ message: 'Edit only developer allowed' });
 
     if (username !== undefined || email !== undefined) {
-      if (!isDeveloper(req)) return res.status(403).json({ message: 'Edit sirf developer kar sakta hai' });
+      if (!isDeveloper(req)) return res.status(403).json({ message: 'Edit only developer allowed' });
       if (username !== undefined) {
         const u = String(username).trim();
         if (!u) return res.status(400).json({ message: 'Username khali nahi ho sakta' });
@@ -185,12 +185,12 @@ exports.updateUser = async (req, res) => {
       if (shopId && !(mongoose.isValidObjectId(shopId) && (await Shop.findById(shopId)))) {
         return res.status(400).json({ message: 'Invalid shop' });
       }
-      if (user.role === 'user' && !shopId) return res.status(400).json({ message: 'User ke liye shop zaroori hai' });
+      if (user.role === 'user' && !shopId) return res.status(400).json({ message: 'Permission denied' });
       user.shopId = shopId || null;
     }
     if (isActive !== undefined) {
       if (String(user._id) === String(req.user.userId) && !isActive) {
-        return res.status(400).json({ message: 'Apna account deactivate nahi kar sakte' });
+        return res.status(400).json({ message: 'Permission denied' });
       }
       user.isActive = !!isActive;
     }
@@ -204,14 +204,14 @@ exports.updateUser = async (req, res) => {
 // developer only: user delete
 exports.deleteUser = async (req, res) => {
   try {
-    if (!isDeveloper(req)) return res.status(403).json({ message: 'Delete sirf developer kar sakta hai' });
+    if (!isDeveloper(req)) return res.status(403).json({ message: 'Permission denied' });
     const user = await User.findById(req.params.id);
     if (!user) return res.status(404).json({ message: 'User not found' });
     if (String(user._id) === String(req.user.userId)) {
-      return res.status(400).json({ message: 'Apna account delete nahi kar sakte' });
+      return res.status(400).json({ message: 'Permission denied' });
     }
     await User.deleteOne({ _id: user._id });
-    res.json({ message: `${user.username} delete ho gaya` });
+    res.json({ message: `${user.username} deleted done` });
   } catch (error) {
     res.status(500).json({ message: 'Error deleting user', error: error.message });
   }
