@@ -34,6 +34,7 @@ import StockLedger from "@/pages/Stockledger/Stockledger";
 import FabricStockSheet from "@/pages/Accounts/Fabricstocksheet/Fabricstocksheet";
 import RawMaterialPage from "@/pages/Master-Profile/Rawmaterial";
 import FinishedGoodPage from "@/pages/Master-Profile/Finishedgood/Finishedgood";
+import UsersShops from "@/pages/Users-Shops/Users-Shops";
 import ShopSwitcher from "@/components/components/ShopSwitcher";
 import ChangePassword from "@/components/components/ChangePassword";
 import Icon from "@/assets/icon.png";
@@ -193,6 +194,7 @@ export default function DeveloperDashboard() {
             <NavBtn tab="dashboard" label="Dashboard" />
             <NavBtn tab="stock"     label="Goods Receipt Note" />
             <NavBtn tab="sales"     label="Sales Tracking" />
+            <NavBtn tab="users-shops" label="Users & Shops" />
 
             <DropdownBtn
               label="Reports"
@@ -255,6 +257,7 @@ export default function DeveloperDashboard() {
         {activeTab === "Raw Material"  && <RawMaterialPage />}
         {activeTab === "Finished Good" && <FinishedGoodPage />}
 
+        {activeTab === "users-shops" && <UsersShops />}
         {activeTab === "dashboard" && <Dashboard products={products} expenses={expenses} sales={sales} notifications={notifications} onTabChange={setActiveTab} />}
         {activeTab === "stock"     && <StockManagement onStockUpdate={setProducts} onNotification={n => setNotifications(p => [...p, n])} />}
         {activeTab === "sales"     && <SalesTracking products={products} onSaleComplete={setSales} onNotification={n => setNotifications(p => [...p, n])} />}

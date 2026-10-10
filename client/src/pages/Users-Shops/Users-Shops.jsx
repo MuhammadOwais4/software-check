@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import axios from "axios";
 import { API_BASE_URL } from "@/config";
+import { useAuth } from "@/AuthContext/AuthContext";
 
 const input = "border border-gray-300 rounded-lg px-3 py-2 text-sm w-full";
 const btn = "px-3 py-2 text-sm rounded-lg font-medium";
@@ -8,7 +9,10 @@ const btn = "px-3 py-2 text-sm rounded-lg font-medium";
 export default function UsersShops() {
   const [shops, setShops] = useState([]);
   const [users, setUsers] = useState([]);
+  const { user: me } = useAuth();
+  const isDev = me?.role === "developer";
   const [msg, setMsg] = useState(null);
+  const [editing, setEditing] = useState(null); // { _id, username, email }
 
   const [shopForm, setShopForm] = useState({ name: "", address: "" });
   const [userForm, setUserForm] = useState({ username: "", email: "", password: "", role: "user", shopId: "" });
@@ -77,6 +81,24 @@ export default function UsersShops() {
     catch (e) { err(e); }
   };
 
+  const saveEdit = async () => {
+    try {
+      await axios.put(`${API_BASE_URL}/auth/users/${editing._id}`, { username: editing.username, email: editing.email });
+      setEditing(null);
+      flash(true, "User update ho gaya");
+      load();
+    } catch (e) { err(e); }
+  };
+
+  const deleteUser = async (u) => {
+    if (!window.confirm(`${u.username} ko delete karna hai? Ye wapas nahi hoga.`)) return;
+    try {
+      const { data } = await axios.delete(`${API_BASE_URL}/auth/users/${u._id}`);
+      flash(true, data.message);
+      load();
+    } catch (e) { err(e); }
+  };
+
   const toggleActive = async (u) => {
     try { await axios.put(`${API_BASE_URL}/auth/users/${u._id}`, { isActive: u.isActive === false }); load(); }
     catch (e) { err(e); }
@@ -126,8 +148,7 @@ export default function UsersShops() {
             <input className={input} placeholder="Password (min 6)" type="password" value={userForm.password} onChange={(e) => setUserForm({ ...userForm, password: e.target.value })} required />
             <select className={input} value={userForm.role} onChange={(e) => setUserForm({ ...userForm, role: e.target.value })}>
               <option value="user">User (ek shop)</option>
-              <option value="admin">Admin (sab shops)</option>
-              <option value="developer">Developer</option>
+              {isDev && <option value="admin">Admin (sab shops)</option>}
             </select>
             {userForm.role === "user" && (
               <select className={`${input} col-span-2`} value={userForm.shopId} onChange={(e) => setUserForm({ ...userForm, shopId: e.target.value })} required>
@@ -153,7 +174,7 @@ export default function UsersShops() {
             {users.map((u) => (
               <tr key={u._id} className="border-b border-gray-100">
                 <td className="py-2 pr-3 font-medium">{u.username}<div className="text-xs text-gray-500">{u.email}</div></td>
-                <td className="pr-3">{u.role}</td>
+                <td className="pr-3">{u.role === "user" ? "user" : ""}</td>
                 <td className="pr-3">
                   {u.role === "user" ? (
                     <select className="border border-gray-300 rounded px-2 py-1" value={u.shopId?._id || ""} onChange={(e) => changeShop(u, e.target.value)}>
@@ -168,12 +189,32 @@ export default function UsersShops() {
                 <td className="space-x-2 whitespace-nowrap">
                   <button onClick={() => resetPassword(u)} className={`${btn} border border-gray-300 hover:bg-gray-100`}>Change Password</button>
                   <button onClick={() => toggleActive(u)} className={`${btn} border border-gray-300 hover:bg-gray-100`}>{u.isActive === false ? "Enable" : "Disable"}</button>
+                  {isDev && (
+                    <>
+                      <button onClick={() => setEditing({ _id: u._id, username: u.username, email: u.email })} className={`${btn} border border-blue-300 text-blue-700 hover:bg-blue-50`}>Edit</button>
+                      <button onClick={() => deleteUser(u)} disabled={String(u._id) === String(me?.userId)} className={`${btn} border border-red-300 text-red-700 hover:bg-red-50 disabled:opacity-40`}>Delete</button>
+                    </>
+                  )}
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+
+      {editing && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-5 w-full max-w-sm space-y-3">
+            <h3 className="text-lg font-bold">Edit User</h3>
+            <input className={input} placeholder="Username" value={editing.username} onChange={(e) => setEditing({ ...editing, username: e.target.value })} />
+            <input className={input} placeholder="Email" type="email" value={editing.email} onChange={(e) => setEditing({ ...editing, email: e.target.value })} />
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setEditing(null)} className={`${btn} border border-gray-300`}>Cancel</button>
+              <button onClick={saveEdit} className={`${btn} bg-blue-600 text-white`}>Save</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

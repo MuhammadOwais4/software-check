@@ -5,6 +5,7 @@ const jwt = require('jsonwebtoken');
 const mongoose = require('mongoose');
 
 const VALID_ROLES = ['user', 'admin', 'developer'];
+const isDeveloper = (req) => req.user && req.user.role === 'developer';
 const isAdmin = (req) => req.user && ['admin', 'developer'].includes(req.user.role);
 
 exports.signup = async (req, res) => {
@@ -33,6 +34,12 @@ exports.signup = async (req, res) => {
       return res.status(400).json({ message: 'Invalid role' });
     }
     const finalRole = role || 'user';
+    if (finalRole === 'developer') {
+      return res.status(403).json({ message: 'Developer account yahan se nahi ban sakta' });
+    }
+    if (finalRole === 'admin' && totalUsers > 0 && !isDeveloper(req)) {
+      return res.status(403).json({ message: 'Admin sirf developer bana sakta hai' });
+    }
 
     let finalShop = null;
     if (finalRole === 'user') {
@@ -103,7 +110,8 @@ exports.login = async (req, res) => {
 // admin: list users (with shop name)
 exports.getUsers = async (req, res) => {
   try {
-    const users = await User.find({}, '-password').populate('shopId', 'name').sort({ createdAt: -1 });
+    const filter = isDeveloper(req) ? {} : { role: { $ne: 'developer' } };
+    const users = await User.find(filter, '-password').populate('shopId', 'name').sort({ createdAt: -1 });
     res.json(users);
   } catch (error) {
     console.error('Error fetching users:', error);
@@ -140,6 +148,7 @@ exports.resetPassword = async (req, res) => {
     }
     const user = await User.findById(req.params.id);
     if (!user) return res.status(404).json({ message: 'User not found' });
+    if (user.role === 'developer' && !isDeveloper(req)) return res.status(403).json({ message: 'Allowed nahi' });
     user.password = await bcrypt.hash(newPassword, 12);
     await user.save();
     res.json({ message: `${user.username} ka password change ho gaya` });
@@ -151,9 +160,26 @@ exports.resetPassword = async (req, res) => {
 // admin: change a user's shop / active status
 exports.updateUser = async (req, res) => {
   try {
-    const { shopId, isActive } = req.body;
+    const { shopId, isActive, username, email } = req.body;
     const user = await User.findById(req.params.id);
     if (!user) return res.status(404).json({ message: 'User not found' });
+    if (user.role === 'developer' && !isDeveloper(req)) return res.status(403).json({ message: 'Allowed nahi' });
+
+    if (username !== undefined || email !== undefined) {
+      if (!isDeveloper(req)) return res.status(403).json({ message: 'Edit sirf developer kar sakta hai' });
+      if (username !== undefined) {
+        const u = String(username).trim();
+        if (!u) return res.status(400).json({ message: 'Username khali nahi ho sakta' });
+        if (await User.findOne({ username: u, _id: { $ne: user._id } })) return res.status(400).json({ message: 'Username already exists' });
+        user.username = u;
+      }
+      if (email !== undefined) {
+        const e = String(email).trim();
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) return res.status(400).json({ message: 'Invalid email format' });
+        if (await User.findOne({ email: e, _id: { $ne: user._id } })) return res.status(400).json({ message: 'Email already exists' });
+        user.email = e;
+      }
+    }
 
     if (shopId !== undefined) {
       if (shopId && !(mongoose.isValidObjectId(shopId) && (await Shop.findById(shopId)))) {
@@ -172,5 +198,21 @@ exports.updateUser = async (req, res) => {
     res.json({ message: 'User updated' });
   } catch (error) {
     res.status(500).json({ message: 'Error updating user', error: error.message });
+  }
+};
+
+// developer only: user delete
+exports.deleteUser = async (req, res) => {
+  try {
+    if (!isDeveloper(req)) return res.status(403).json({ message: 'Delete sirf developer kar sakta hai' });
+    const user = await User.findById(req.params.id);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+    if (String(user._id) === String(req.user.userId)) {
+      return res.status(400).json({ message: 'Apna account delete nahi kar sakte' });
+    }
+    await User.deleteOne({ _id: user._id });
+    res.json({ message: `${user.username} delete ho gaya` });
+  } catch (error) {
+    res.status(500).json({ message: 'Error deleting user', error: error.message });
   }
 };

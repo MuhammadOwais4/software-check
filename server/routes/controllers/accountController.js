@@ -1,10 +1,11 @@
+const { withTransactionFlag, accountHasTransactions, LOCK_MESSAGE } = require("./chart-of-accounts/_transactionGuard")
 const Account = require("../models/Account")
 
 // Get all accounts
 const getAllAccounts = async (req, res) => {
   try {
     const accounts = await Account.find({ isActive: true }).sort({ code: 1 })
-    res.json({ success: true, data: accounts })
+    res.json({ success: true, data: await withTransactionFlag(req, accounts) })
   } catch (error) {
     res.status(500).json({ success: false, message: error.message })
   }
@@ -18,7 +19,7 @@ const getAccountsByCategory = async (req, res) => {
       category: category,
       isActive: true,
     }).sort({ code: 1 })
-    res.json({ success: true, data: accounts })
+    res.json({ success: true, data: await withTransactionFlag(req, accounts) })
   } catch (error) {
     res.status(500).json({ success: false, message: error.message })
   }
@@ -82,6 +83,10 @@ const deleteAccount = async (req, res) => {
   try {
     const { id } = req.params
 
+    const toDelete = await Account.findById(id)
+    if (toDelete && (await accountHasTransactions(req, toDelete))) {
+      return res.status(400).json({ success: false, message: LOCK_MESSAGE })
+    }
     const account = await Account.findByIdAndUpdate(id, { isActive: false }, { new: true })
 
     if (!account) {

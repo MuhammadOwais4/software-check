@@ -1,3 +1,4 @@
+const { withTransactionFlag, accountHasTransactions, LOCK_MESSAGE } = require("./_transactionGuard")
 const Liability = require("../../models/chart-of-accounts/Liabilitys")
 
 // Get all liabilities
@@ -7,7 +8,7 @@ const getAllLiabilities = async (req, res) => {
     res.json({
       success: true,
       count: liabilities.length,
-      data: liabilities,
+      data: await withTransactionFlag(req, liabilities),
     })
   } catch (error) {
     res.status(500).json({
@@ -126,6 +127,10 @@ const updateLiability = async (req, res) => {
 // Delete liability (soft delete)
 const deleteLiability = async (req, res) => {
   try {
+    const toDelete = await Liability.findById(req.params.id)
+    if (toDelete && (await accountHasTransactions(req, toDelete))) {
+      return res.status(400).json({ success: false, message: LOCK_MESSAGE })
+    }
     const liability = await Liability.findByIdAndUpdate(req.params.id, { isActive: false }, { new: true })
 
     if (!liability) {

@@ -250,9 +250,9 @@ function LiabilitiesPage({ onBack }) {
                     </button>
                     <button
                       onClick={() => handleDelete(liability._id)}
-                      className="text-red-600 hover:text-red-900 p-1 rounded"
-                      title="Delete Account"
-                      disabled={loading}
+                      className={`p-1 rounded ${liability.hasTransactions ? "text-gray-400 cursor-not-allowed" : "text-red-600 hover:text-red-900"}`}
+                      title={liability.hasTransactions ? "Is account par transaction hai, delete nahi ho sakta" : "Delete Account"}
+                      disabled={loading || liability.hasTransactions}
                     >
                       <Trash2 className="h-4 w-4" />
                     </button>

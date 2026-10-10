@@ -1,3 +1,4 @@
+const { withTransactionFlag, accountHasTransactions, LOCK_MESSAGE } = require("./_transactionGuard")
 const Asset = require("../../models/chart-of-accounts/Asset")
 const { eventNames } = require("../../models/chart-of-accounts/Asset")
 
@@ -8,7 +9,7 @@ const getAllAssets = async (req, res) => {
     res.json({
       success: true,
       count: assets.length,
-      data: assets,
+      data: await withTransactionFlag(req, assets),
     })
   } catch (error) {
     res.status(500).json({
@@ -127,6 +128,10 @@ const updateAsset = async (req, res) => {
 // Delete asset (soft delete)
 const deleteAsset = async (req, res) => {
   try {
+    const toDelete = await Asset.findById(req.params.id)
+    if (toDelete && (await accountHasTransactions(req, toDelete))) {
+      return res.status(400).json({ success: false, message: LOCK_MESSAGE })
+    }
     const asset = await Asset.findByIdAndUpdate(req.params.id, { isActive: false }, { new: true })
 
     if (!asset) {

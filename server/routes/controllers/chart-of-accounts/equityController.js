@@ -1,3 +1,4 @@
+const { withTransactionFlag, accountHasTransactions, LOCK_MESSAGE } = require("./_transactionGuard")
 const Equity = require("../../models/chart-of-accounts/Equity")
 
 // Get all equity accounts
@@ -7,7 +8,7 @@ const getAllEquity = async (req, res) => {
     res.json({
       success: true,
       count: equity.length,
-      data: equity,
+      data: await withTransactionFlag(req, equity),
     })
   } catch (error) {
     res.status(500).json({
@@ -186,6 +187,10 @@ const updateEquity = async (req, res) => {
 // Delete equity account (soft delete)
 const deleteEquity = async (req, res) => {
   try {
+    const toDelete = await Equity.findById(req.params.id)
+    if (toDelete && (await accountHasTransactions(req, toDelete))) {
+      return res.status(400).json({ success: false, message: LOCK_MESSAGE })
+    }
     const equity = await Equity.findByIdAndUpdate(req.params.id, { isActive: false }, { new: true })
 
     if (!equity) {

@@ -34,7 +34,6 @@ import BarcodeScannerScreen from "@/pages/Barcode-Scanner-Screen/Barcode-Scanner
 import OverheadPayment from "@/pages/Accounts/Overhead-Payment/Overhead-Payment.jsx";
 import UsersShops from "@/pages/Users-Shops/Users-Shops";
 import ShopSwitcher from "@/components/components/ShopSwitcher";
-import ChangePassword from "@/components/components/ChangePassword";
 import Icon from "@/assets/icon.png";
 
 const REPORT_ITEMS = [
@@ -151,7 +150,6 @@ export default function AdminDashboard() {
             <ShopSwitcher />
             <span className="text-xs bg-red-100 text-red-700 font-bold px-3 py-1 rounded-full">ADMIN</span>
             <span className="text-sm text-gray-600 hidden sm:block font-medium">{user?.username}</span>
-            <ChangePassword />
             <button
               onClick={() => { logout(); navigate("/login", { replace: true }); }}
               className="text-sm bg-gray-800 hover:bg-gray-900 text-white px-4 py-2 rounded-lg font-medium transition-colors"

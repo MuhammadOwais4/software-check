@@ -304,9 +304,9 @@ function ExpensesPage({ onBack }) {
                     </button>
                     <button
                       onClick={() => handleDelete(expense._id)}
-                      className="text-red-600 hover:text-red-900 p-1 rounded"
-                      title="Delete Account"
-                      disabled={loading}
+                      className={`p-1 rounded ${expense.hasTransactions ? "text-gray-400 cursor-not-allowed" : "text-red-600 hover:text-red-900"}`}
+                      title={expense.hasTransactions ? "Is account par transaction hai, delete nahi ho sakta" : "Delete Account"}
+                      disabled={loading || expense.hasTransactions}
                     >
                       <Trash2 className="h-4 w-4" />
                     </button>

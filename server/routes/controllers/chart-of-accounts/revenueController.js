@@ -1,3 +1,4 @@
+const { withTransactionFlag, accountHasTransactions, LOCK_MESSAGE } = require("./_transactionGuard")
 const Revenue = require("../../models/chart-of-accounts/Revenue")
 
 // Get all revenue accounts
@@ -7,7 +8,7 @@ const getAllRevenue = async (req, res) => {
     res.json({
       success: true,
       count: revenue.length,
-      data: revenue,
+      data: await withTransactionFlag(req, revenue),
     })
   } catch (error) {
     res.status(500).json({
@@ -126,6 +127,10 @@ const updateRevenue = async (req, res) => {
 // Delete revenue account (soft delete)
 const deleteRevenue = async (req, res) => {
   try {
+    const toDelete = await Revenue.findById(req.params.id)
+    if (toDelete && (await accountHasTransactions(req, toDelete))) {
+      return res.status(400).json({ success: false, message: LOCK_MESSAGE })
+    }
     const revenue = await Revenue.findByIdAndUpdate(req.params.id, { isActive: false }, { new: true })
 
     if (!revenue) {

@@ -248,9 +248,9 @@ function RevenuePage({ onBack }) {
                     </button>
                     <button
                       onClick={() => handleDelete(rev._id)}
-                      className="text-red-600 hover:text-red-900 p-1 rounded"
-                      title="Delete Account"
-                      disabled={loading}
+                      className={`p-1 rounded ${rev.hasTransactions ? "text-gray-400 cursor-not-allowed" : "text-red-600 hover:text-red-900"}`}
+                      title={rev.hasTransactions ? "Is account par transaction hai, delete nahi ho sakta" : "Delete Account"}
+                      disabled={loading || rev.hasTransactions}
                     >
                       <Trash2 className="h-4 w-4" />
                     </button>

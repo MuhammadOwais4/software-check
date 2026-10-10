@@ -295,9 +295,9 @@ function EquityPage({ onBack }) {
                     </button>
                     <button
                       onClick={() => handleDelete(equityItem._id)}
-                      className="text-red-600 hover:text-red-900 p-1 rounded hover:bg-red-50 transition-colors"
-                      title="Delete Account"
-                      disabled={loading}
+                      className={`p-1 rounded transition-colors ${equityItem.hasTransactions ? "text-gray-400 cursor-not-allowed" : "text-red-600 hover:text-red-900 hover:bg-red-50"}`}
+                      title={equityItem.hasTransactions ? "Is account par transaction hai, delete nahi ho sakta" : "Delete Account"}
+                      disabled={loading || equityItem.hasTransactions}
                     >
                       <Trash2 className="h-4 w-4" />
                     </button>

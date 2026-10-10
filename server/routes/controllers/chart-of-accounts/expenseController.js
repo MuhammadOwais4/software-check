@@ -1,3 +1,4 @@
+const { withTransactionFlag, accountHasTransactions, LOCK_MESSAGE } = require("./_transactionGuard")
 const Expense = require("../../models/chart-of-accounts/Expense")
 const mongoose = require("mongoose")
 
@@ -8,7 +9,7 @@ const getAllExpenses = async (req, res) => {
     res.json({
       success: true,
       count: expenses.length,
-      data: expenses,
+      data: await withTransactionFlag(req, expenses),
     })
   } catch (error) {
     console.error("Error fetching expenses:", error)
@@ -204,6 +205,10 @@ const deleteExpense = async (req, res) => {
       })
     }
 
+    const toDelete = await Expense.findById(expenseId)
+    if (toDelete && (await accountHasTransactions(req, toDelete))) {
+      return res.status(400).json({ success: false, message: LOCK_MESSAGE })
+    }
     const expense = await Expense.findByIdAndUpdate(
       expenseId, 
       { isActive: false }, 
