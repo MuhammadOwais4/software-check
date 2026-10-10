@@ -1,9 +1,10 @@
-const { withTransactionFlag, accountHasTransactions, LOCK_MESSAGE } = require("./_transactionGuard")
+const { withTransactionFlag, accountHasTransactions, LOCK_MESSAGE, needShop } = require("./_transactionGuard")
 const Liability = require("../../models/chart-of-accounts/Liabilitys")
 
 // Get all liabilities
 const getAllLiabilities = async (req, res) => {
   try {
+    if (needShop(req, res)) return
     const liabilities = await Liability.find({ isActive: true }).sort({ code: 1 })
     res.json({
       success: true,

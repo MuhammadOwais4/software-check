@@ -47,4 +47,15 @@ async function accountHasTransactions(req, account) {
 
 const LOCK_MESSAGE = "Is account par transaction maujood hai, isliye delete nahi ho sakta."
 
-module.exports = { withTransactionFlag, accountHasTransactions, LOCK_MESSAGE }
+// Admin/developer ne agar koi shop select nahi ki ("All Shops"), to accounts ki list khali jati hai,
+// taake dono shops ke accounts mix hokar na dikhein. Har shop ke accounts sirf apni shop me nazar aate hain.
+const NEED_SHOP_MESSAGE = "Pehle upar se shop select karo - har shop ke accounts alag hain."
+function needShop(req, res) {
+  if (!req.shopId && req.user && ["admin", "developer"].includes(req.user.role)) {
+    res.json({ success: true, count: 0, data: [], message: NEED_SHOP_MESSAGE })
+    return true
+  }
+  return false
+}
+
+module.exports = { withTransactionFlag, accountHasTransactions, LOCK_MESSAGE, needShop }

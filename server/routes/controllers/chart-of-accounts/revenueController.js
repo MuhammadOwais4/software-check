@@ -1,9 +1,10 @@
-const { withTransactionFlag, accountHasTransactions, LOCK_MESSAGE } = require("./_transactionGuard")
+const { withTransactionFlag, accountHasTransactions, LOCK_MESSAGE, needShop } = require("./_transactionGuard")
 const Revenue = require("../../models/chart-of-accounts/Revenue")
 
 // Get all revenue accounts
 const getAllRevenue = async (req, res) => {
   try {
+    if (needShop(req, res)) return
     const revenue = await Revenue.find({ isActive: true }).sort({ code: 1 })
     res.json({
       success: true,

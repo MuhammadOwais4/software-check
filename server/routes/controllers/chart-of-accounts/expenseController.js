@@ -1,10 +1,11 @@
-const { withTransactionFlag, accountHasTransactions, LOCK_MESSAGE } = require("./_transactionGuard")
+const { withTransactionFlag, accountHasTransactions, LOCK_MESSAGE, needShop } = require("./_transactionGuard")
 const Expense = require("../../models/chart-of-accounts/Expense")
 const mongoose = require("mongoose")
 
 // Get all expenses
 const getAllExpenses = async (req, res) => {
   try {
+    if (needShop(req, res)) return
     const expenses = await Expense.find({ isActive: true }).sort({ code: 1 })
     res.json({
       success: true,

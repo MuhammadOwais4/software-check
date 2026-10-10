@@ -1,10 +1,11 @@
-const { withTransactionFlag, accountHasTransactions, LOCK_MESSAGE } = require("./_transactionGuard")
+const { withTransactionFlag, accountHasTransactions, LOCK_MESSAGE, needShop } = require("./_transactionGuard")
 const Asset = require("../../models/chart-of-accounts/Asset")
 const { eventNames } = require("../../models/chart-of-accounts/Asset")
 
 // Get all assets
 const getAllAssets = async (req, res) => {
   try {
+    if (needShop(req, res)) return
     const assets = await Asset.find({ isActive: true }).sort({ code: 1 })
     res.json({
       success: true,

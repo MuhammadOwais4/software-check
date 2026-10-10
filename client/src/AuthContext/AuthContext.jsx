@@ -58,6 +58,15 @@ export function AuthProvider({ children }) {
     localStorage.setItem("username",    username);
     if (data.shopId)   localStorage.setItem("shopId",   data.shopId);
     if (data.shopName) localStorage.setItem("shopName", data.shopName);
+    // admin/developer: pehli shop khud select ho jaye, taake har shop ke accounts alag nazar aayein
+    if (data.role === "admin" || data.role === "developer") {
+      try {
+        const r = await fetch(`${API_BASE_URL}/shops`, { headers: { Authorization: `Bearer ${data.token}` } });
+        const list = await r.json();
+        const first = Array.isArray(list) ? list.find((x) => x.isActive !== false) : null;
+        if (first) localStorage.setItem("selectedShopId", first._id);
+      } catch { /* All Shops pe hi rahega */ }
+    }
     // 'user' is always locked to own shop; admin/developer start on "All Shops"
     setUser({
       token: data.token, role: data.role, username,
