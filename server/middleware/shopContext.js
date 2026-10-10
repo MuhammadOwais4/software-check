@@ -37,7 +37,7 @@ function authAndShop(req, res, next) {
   try {
     payload = jwt.verify(header.slice(7), process.env.SECURE_KEY)
   } catch (e) {
-    return res.status(401).json({ message: "Session expired, dobara login karo" })
+    return res.status(401).json({ message: "Invalid token" })
   }
 
   let shopId = null
@@ -46,7 +46,7 @@ function authAndShop(req, res, next) {
     const h = req.headers["x-shop-id"]
     if (h && h !== "all" && mongoose.isValidObjectId(h)) shopId = h
   } else {
-    if (!payload.shopId) return res.status(403).json({ message: "Is user ko koi shop assign nahi hai" })
+    if (!payload.shopId) return res.status(403).json({ message: "Permission denied" })
     shopId = payload.shopId
   }
 
@@ -56,7 +56,7 @@ function authAndShop(req, res, next) {
 }
 
 const requireRole = (...roles) => (req, res, next) => {
-  if (!req.user || !roles.includes(req.user.role)) return res.status(403).json({ message: "Permission nahi hai" })
+  if (!req.user || !roles.includes(req.user.role)) return res.status(403).json({ message: "Permission denied" })
   next()
 }
 

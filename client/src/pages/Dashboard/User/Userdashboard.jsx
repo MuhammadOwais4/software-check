@@ -20,7 +20,6 @@ import GeneralLedger from "@/pages/Accounts/Genreal-Leager/Genreal-Leager";
 import TrialBalance from "@/pages/Accounts/TrialBalance/TrialBalance";
 import JVAccountReport from "@/pages/reports/JV-Account-Report/JV-Account-Report";
 import JVDetail from "@/pages/reports/JV-Account-Report/JV-Detail";
-import UsersShops from "@/pages/Users-Shops/Users-Shops";
 import Dashboard from "@/pages/Dashboard/Dashboard.jsx";
 import ShopSwitcher from "@/components/components/ShopSwitcher";
 import ChangePassword from "@/components/components/ChangePassword";
@@ -128,8 +127,6 @@ export default function UserDashboard() {
             <NavBtn tab="dashboard" label="Dashboard" />
             <NavBtn tab="stock"     label="Goods Receipt Note" />
             <NavBtn tab="sales"     label="Sales Tracking" />
-
-            <NavBtn tab="users-shops" label="Users & Shops" />
 
             {/* Reports */}
             <div className="relative" ref={reportsRef}>
@@ -243,7 +240,7 @@ export default function UserDashboard() {
         {activeTab === "dashboard"            && <Dashboard products={products} sales={sales} notifications={notifications} onTabChange={setActiveTab} />}
         {activeTab === "stock"                && <StockManagement onStockUpdate={setProducts} onNotification={n => setNotifications(p => [...p, n])} />}
         {activeTab === "sales"                && <SalesTracking products={products} onSaleComplete={setSales} onNotification={n => setNotifications(p => [...p, n])} />}
-        {activeTab === "users-shops"          && <UsersShops />}
+    
         {activeTab === "General Ledger"       && <GeneralLedger />}
         {activeTab === "Trial Balance"        && <TrialBalance />}
         {activeTab === "JV Account Report"    && <JVAccountReport onOpenJV={(id) => setActiveTab("JV Detail:" + id)} />}
