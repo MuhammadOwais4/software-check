@@ -3,6 +3,10 @@ const mongoose = require("mongoose")
 const cors = require("cors")
 require("dotenv").config()
 
+// Multi-shop: must be registered BEFORE any model is loaded (routes require the models)
+mongoose.plugin(require("./plugins/shopScope"), { applyPluginsToChildSchemas: false })
+const { authAndShop } = require("./middleware/shopContext")
+
 const app = express()
 
 // ---------- CORS ----------
@@ -73,7 +77,11 @@ app.use("/api", async (req, res, next) => {
   }
 })
 
+// Login check + current shop for every /api route (login/signup/health are public)
+app.use("/api", authAndShop)
+
 // ---------- Routes ----------
+app.use("/api/shops", require("./routes/shopRoutes"))
 app.use("/api/products", require("./routes/productRoutes"))
 app.use("/api/sale-discount", require("./routes/sale-discount-Routes"))
 app.use("/api/purchases-discount", require("./routes/purchases-discount-Routes"))

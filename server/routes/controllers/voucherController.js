@@ -7,6 +7,17 @@ const generateVoucherNumber = (type) => {
   return `${type}-${timestamp}`
 }
 
+
+// Journal Voucher rule: total debit and total credit must ALWAYS be equal
+const toCents = (v) => Math.round((Number(v) || 0) * 100)
+const jvBalanceError = (entries) => {
+  const dr = entries.reduce((s, e) => s + toCents(e.debitAmount), 0)
+  const cr = entries.reduce((s, e) => s + toCents(e.creditAmount), 0)
+  if (dr === 0 && cr === 0) return "Amount daalo"
+  if (dr !== cr) return `Total Debit (${dr / 100}) aur Total Credit (${cr / 100}) equal nahi hain`
+  return null
+}
+
 // Get all vouchers
 const getAllVouchers = async (req, res) => {
   try {
@@ -80,7 +91,10 @@ const createVoucher = async (req, res) => {
       })
     }
 
-    // Users can now add any combination of debit and credit entries
+    if (voucherType === "JV") {
+      const e = jvBalanceError(entries || [])
+      if (e) return res.status(400).json({ success: false, message: e })
+    }
 
     // Calculate totals
     const totalDebit = entries.reduce((sum, entry) => sum + (entry.debitAmount || 0), 0)
@@ -136,6 +150,11 @@ const updateVoucher = async (req, res) => {
     // Calculate totals
     const totalDebit = entries.reduce((sum, entry) => sum + (entry.debitAmount || 0), 0)
     const totalCredit = entries.reduce((sum, entry) => sum + (entry.creditAmount || 0), 0)
+
+    if (voucher.voucherType === "JV") {
+      const e = jvBalanceError(entries || [])
+      if (e) return res.status(400).json({ success: false, message: e })
+    }
 
     // Process entries
     const processedEntries = entries.map((entry) => ({

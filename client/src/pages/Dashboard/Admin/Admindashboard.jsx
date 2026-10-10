@@ -32,6 +32,9 @@ import SupplierPaymentVoucher from "@/pages/Accounts/Supplier-Cash-payment-Vouch
 import CustomerReceiptVoucher from "@/pages/Accounts/customer-Receip-Voucher/Customer-Receip-Voucher";
 import BarcodeScannerScreen from "@/pages/Barcode-Scanner-Screen/Barcode-Scanner-Screen.jsx";
 import OverheadPayment from "@/pages/Accounts/Overhead-Payment/Overhead-Payment.jsx";
+import UsersShops from "@/pages/Users-Shops/Users-Shops";
+import ShopSwitcher from "@/components/components/ShopSwitcher";
+import ChangePassword from "@/components/components/ChangePassword";
 import Icon from "@/assets/icon.png";
 
 const REPORT_ITEMS = [
@@ -145,8 +148,10 @@ export default function AdminDashboard() {
             </div>
           </div>
           <div className="flex items-center gap-3">
+            <ShopSwitcher />
             <span className="text-xs bg-red-100 text-red-700 font-bold px-3 py-1 rounded-full">ADMIN</span>
             <span className="text-sm text-gray-600 hidden sm:block font-medium">{user?.username}</span>
+            <ChangePassword />
             <button
               onClick={() => { logout(); navigate("/login", { replace: true }); }}
               className="text-sm bg-gray-800 hover:bg-gray-900 text-white px-4 py-2 rounded-lg font-medium transition-colors"
@@ -161,6 +166,7 @@ export default function AdminDashboard() {
         <div className="mb-6 border-b border-gray-200 bg-white rounded-t-xl px-4">
           <nav className="-mb-px flex flex-wrap">
             <NavBtn tab="dashboard" label="Dashboard" />
+            <NavBtn tab="users-shops" label="Users & Shops" />
             <DropdownBtn
               label="Reports"
               isActive={isReportActive}
@@ -230,6 +236,7 @@ export default function AdminDashboard() {
             {chartPage === "revenue"     && <RevenuePage />}
           </>
         )}
+        {activeTab === "users-shops"        && <UsersShops />}
         {activeTab === "Journal Voucher"            && <JournalVoucher />}
        
       </main>

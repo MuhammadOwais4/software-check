@@ -1,7 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
-import { createPortal } from "react-dom"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -23,7 +22,7 @@ const newRow = () => ({
   id: `row-${Date.now()}-${Math.floor(Math.random() * 1000000)}`,
   accountCode: "",
   accountName: "",
-  narration: "", // separate narration for every row
+  billReference: "",
   debit: "",
   credit: "",
   chequeNo: "",
@@ -43,58 +42,14 @@ const generateUniqueVoucherNo = () => {
 
 const toCents = (v) => Math.round((Number.parseFloat(v) || 0) * 100)
 
-const hasAmount = (r) => toCents(r.debit) > 0 || toCents(r.credit) > 0
-
 /* ---------- Account code search cell (code input + dropdown) ---------- */
-function AccountCodeCell({ value, accounts, onSelect, focusSignal = 0 }) {
+function AccountCodeCell({ value, accounts, onSelect }) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState(value || "")
-  const [pos, setPos] = useState(null)
-  const wrapRef = useRef(null)
 
   useEffect(() => {
     setQuery(value || "")
   }, [value])
-
-  // Parent asks this cell to take focus (e.g. after "Add More") -> focus + open dropdown
-  useEffect(() => {
-    if (!focusSignal) return
-    const input = wrapRef.current?.querySelector("input")
-    if (input) {
-      input.scrollIntoView({ block: "nearest", inline: "nearest" })
-      input.focus()
-    }
-  }, [focusSignal])
-
-  // Dropdown is rendered in a portal with fixed position so the table's
-  // scroll container can never clip it.
-  const updatePos = () => {
-    const el = wrapRef.current
-    if (!el) return
-    const r = el.getBoundingClientRect()
-    const spaceBelow = window.innerHeight - r.bottom
-    const spaceAbove = r.top
-    const openUp = spaceBelow < 200 && spaceAbove > spaceBelow
-    const room = (openUp ? spaceAbove : spaceBelow) - 12
-    setPos({
-      left: Math.min(r.left, Math.max(8, window.innerWidth - 296)),
-      width: Math.max(r.width, 288),
-      top: openUp ? undefined : r.bottom + 4,
-      bottom: openUp ? window.innerHeight - r.top + 4 : undefined,
-      maxHeight: Math.max(120, Math.min(260, room)),
-    })
-  }
-
-  useEffect(() => {
-    if (!open) return
-    updatePos()
-    window.addEventListener("scroll", updatePos, true)
-    window.addEventListener("resize", updatePos)
-    return () => {
-      window.removeEventListener("scroll", updatePos, true)
-      window.removeEventListener("resize", updatePos)
-    }
-  }, [open])
 
   const q = query.trim().toLowerCase()
   const filtered = accounts
@@ -111,7 +66,7 @@ function AccountCodeCell({ value, accounts, onSelect, focusSignal = 0 }) {
   }
 
   return (
-    <div className="relative" ref={wrapRef}>
+    <div className="relative">
       <Input
         value={query}
         onChange={(e) => {
@@ -124,43 +79,28 @@ function AccountCodeCell({ value, accounts, onSelect, focusSignal = 0 }) {
         className="pr-8 h-9 text-sm border-gray-300"
       />
       <Search className="w-4 h-4 absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none" />
-      {open &&
-        pos &&
-        typeof document !== "undefined" &&
-        createPortal(
-          <div
-            style={{
-              position: "fixed",
-              left: pos.left,
-              top: pos.top,
-              bottom: pos.bottom,
-              width: pos.width,
-              maxHeight: pos.maxHeight,
-              zIndex: 9999,
-            }}
-            className="overflow-y-auto bg-white border border-gray-300 rounded-md shadow-lg"
-          >
-            {filtered.length === 0 ? (
-              <div className="px-3 py-2 text-sm text-gray-500">No account found</div>
-            ) : (
-              filtered.map((a) => (
-                <div
-                  key={a.value}
-                  onMouseDown={(e) => {
-                    e.preventDefault()
-                    onSelect(a)
-                    setOpen(false)
-                  }}
-                  className="px-3 py-1.5 text-sm cursor-pointer hover:bg-blue-50 flex justify-between gap-2"
-                >
-                  <span className="font-mono">{a.code}</span>
-                  <span className="truncate text-gray-700">{a.name}</span>
-                </div>
-              ))
-            )}
-          </div>,
-          document.body,
-        )}
+      {open && (
+        <div className="absolute z-50 mt-1 w-72 max-h-60 overflow-y-auto bg-white border border-gray-300 rounded-md shadow-lg">
+          {filtered.length === 0 ? (
+            <div className="px-3 py-2 text-sm text-gray-500">No account found</div>
+          ) : (
+            filtered.map((a) => (
+              <div
+                key={a.value}
+                onMouseDown={(e) => {
+                  e.preventDefault()
+                  onSelect(a)
+                  setOpen(false)
+                }}
+                className="px-3 py-1.5 text-sm cursor-pointer hover:bg-blue-50 flex justify-between gap-2"
+              >
+                <span className="font-mono">{a.code}</span>
+                <span className="truncate text-gray-700">{a.name}</span>
+              </div>
+            ))
+          )}
+        </div>
+      )}
     </div>
   )
 }
@@ -182,22 +122,17 @@ export default function JournalVoucher() {
   const [voucherToDelete, setVoucherToDelete] = useState(null)
   const [deleting, setDeleting] = useState(false)
   const [showPrintPreview, setShowPrintPreview] = useState(false)
-  const [focusReq, setFocusReq] = useState({ id: null, n: 0 }) // which row's account cell should get focus
 
   /* ---------- Totals & balance rule ---------- */
   const totalDebit = rows.reduce((s, r) => s + (Number.parseFloat(r.debit) || 0), 0)
   const totalCredit = rows.reduce((s, r) => s + (Number.parseFloat(r.credit) || 0), 0)
   const diffCents = toCents(totalDebit) - toCents(totalCredit)
   const isBalanced = diffCents === 0 && toCents(totalDebit) > 0
-  const usedRows = rows.filter((r) => r.accountCode || r.debit || r.credit)
-  const allHaveAccounts = usedRows.every((r) => r.accountCode && r.accountName)
-  // Save / Print only open when Debit = Credit (and every amount row has an account)
-  const canSubmit = isBalanced && allHaveAccounts
 
   /* ---------- Print ---------- */
   const handlePrint = () => {
-    if (!canSubmit) {
-      alert("Total Debit aur Total Credit equal hona zaroori hai (aur har row ka account select ho).")
+    if (!isBalanced) {
+      alert("Total Debit aur Total Credit equal hona zaroori hai.")
       return
     }
     setShowPrintPreview(true)
@@ -259,7 +194,7 @@ export default function JournalVoucher() {
   const loadAllVouchers = async () => {
     try {
       setLoadingVouchers(true)
-      const response = await ApiHandler.getVouchers()
+      const response = await ApiHandler.getVouchers({ type: "JV", limit: 500 })
       setAllVouchers((response.data || []).filter((v) => v.voucherType === "JV"))
     } catch (error) {
       console.error("Error loading vouchers:", error)
@@ -274,35 +209,16 @@ export default function JournalVoucher() {
 
   const selectAccount = (id, acc) => updateRow(id, { accountCode: String(acc.code), accountName: acc.name })
 
-  // Typing in one side clears the other side of the same row. Amounts are always typed by the user.
-  const setAmount = (id, side, value) => {
-    const other = side === "debit" ? "credit" : "debit"
-    updateRow(id, value ? { [side]: value, [other]: "" } : { [side]: "" })
-  }
-  const setDebit = (id, value) => setAmount(id, "debit", value)
-  const setCredit = (id, value) => setAmount(id, "credit", value)
+  // Typing in one side clears the other side of the same row
+  const setDebit = (id, value) => updateRow(id, value ? { debit: value, credit: "" } : { debit: "" })
+  const setCredit = (id, value) => updateRow(id, value ? { credit: value, debit: "" } : { credit: "" })
 
-  // Add More: adds a BLANK row (re-uses an empty one if it exists) and opens its Account Code
-  // dropdown. No amount is filled in - the user types his own amount; the remaining
-  // amount is only shown as a hint in the field.
+  // New row: pre-fill the difference on the opposite side so voucher balances quickly
   const addRow = () => {
-    let emptyIdx = -1
-    for (let i = rows.length - 1; i >= 0; i--) {
-      const r = rows[i]
-      if (!r.accountCode && !hasAmount(r)) {
-        emptyIdx = i
-        break
-      }
-    }
-    let targetId
-    if (emptyIdx !== -1) {
-      targetId = rows[emptyIdx].id
-    } else {
-      const blank = newRow()
-      targetId = blank.id
-      setRows((prev) => [...prev, blank])
-    }
-    setFocusReq((f) => ({ id: targetId, n: f.n + 1 }))
+    const r = newRow()
+    if (diffCents > 0) r.credit = (diffCents / 100).toString()
+    else if (diffCents < 0) r.debit = (Math.abs(diffCents) / 100).toString()
+    setRows((prev) => [...prev, r])
   }
 
   const removeRow = (id) => {
@@ -331,12 +247,12 @@ export default function JournalVoucher() {
         id: e.id || e._id || `loaded-${Date.now()}-${i}-${Math.floor(Math.random() * 1000000)}`,
         accountCode: code || "",
         accountName: rest.join(" - "),
-        narration: e.description || "",
+        billReference: e.billReference || "",
         debit: e.debitAmount > 0 ? String(e.debitAmount) : "",
         credit: e.creditAmount > 0 ? String(e.creditAmount) : "",
         chequeNo: e.chequeNo || "",
         chequeDate: e.chequeDate ? String(e.chequeDate).split("T")[0] : "",
-        remarks: "",
+        remarks: e.description || "",
       }
     })
     setRows(loaded.length >= 2 ? loaded : [...loaded, ...initialRows().slice(loaded.length)])
@@ -404,20 +320,20 @@ export default function JournalVoucher() {
       return {
         id: r.id,
         serialNo: i + 1,
-        pairId: i + 1, // backend schema requires a numeric pairId on every entry
+        pairId: i + 1,
         account: `${r.accountCode} - ${r.accountName}`,
+        accountCode: r.accountCode,
         debitAmount: isDebit ? Number.parseFloat(r.debit) : 0,
         creditAmount: isDebit ? 0 : Number.parseFloat(r.credit),
         entryType: isDebit ? "debit" : "credit",
-        description: (r.narration || r.remarks || "").trim(), // each row keeps its own narration
+        description: (r.remarks || "").trim(),
+        billReference: r.billReference,
         chequeNo: r.chequeNo,
         chequeDate: r.chequeDate || null,
       }
     })
 
-    // Voucher-level narration = all distinct row narrations together (schema needs one text)
-    const narration =
-      [...new Set(entries.map((e) => e.description).filter(Boolean))].join(" | ").trim() || "Journal Voucher"
+    const narration = (entries.find((e) => e.description)?.description || "Journal Voucher").trim()
 
     try {
       setSaving(true)
@@ -476,11 +392,6 @@ export default function JournalVoucher() {
     if (!isFinite(num)) return "0"
     return new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }).format(num)
   }
-
-  // Remaining amount hint: shown only as a placeholder on the side that is still short
-  const remainingText = diffCents !== 0 ? formatAmount(Math.abs(diffCents) / 100) : ""
-  const debitHint = diffCents < 0 ? remainingText : ""
-  const creditHint = diffCents > 0 ? remainingText : ""
 
   const printRows = rows.filter((r) => r.accountCode || r.debit || r.credit)
 
@@ -624,7 +535,7 @@ export default function JournalVoucher() {
                     <tr className="text-center text-gray-700">
                       <th className="px-2 py-3 border-r border-gray-200 w-44">AccountCode</th>
                       <th className="px-2 py-3 border-r border-gray-200 w-48">Account</th>
-                      <th className="px-2 py-3 border-r border-gray-200 w-56">Narration</th>
+                      <th className="px-2 py-3 border-r border-gray-200 w-36">Bill Reference</th>
                       <th className="px-2 py-3 border-r border-gray-200 w-32">Debit</th>
                       <th className="px-2 py-3 border-r border-gray-200 w-32">Credit</th>
                       <th className="px-2 py-3 border-r border-gray-200 w-32">Cheque No</th>
@@ -641,7 +552,6 @@ export default function JournalVoucher() {
                             value={r.accountCode}
                             accounts={accountOptions}
                             onSelect={(acc) => selectAccount(r.id, acc)}
-                            focusSignal={focusReq.id === r.id ? focusReq.n : 0}
                           />
                         </td>
                         <td className="p-2 border-r border-gray-200">
@@ -653,12 +563,14 @@ export default function JournalVoucher() {
                           />
                         </td>
                         <td className="p-2 border-r border-gray-200">
-                          <Input
-                            value={r.narration}
-                            onChange={(e) => updateRow(r.id, { narration: e.target.value })}
-                            placeholder="Narration"
-                            className="h-9 text-sm border-gray-300"
-                          />
+                          <div className="relative">
+                            <Input
+                              value={r.billReference}
+                              onChange={(e) => updateRow(r.id, { billReference: e.target.value })}
+                              className="pr-8 h-9 text-sm border-gray-300"
+                            />
+                            <Search className="w-4 h-4 absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none" />
+                          </div>
                         </td>
                         <td className="p-2 border-r border-gray-200">
                           <Input
@@ -667,8 +579,6 @@ export default function JournalVoucher() {
                             min="0"
                             value={r.debit}
                             onChange={(e) => setDebit(r.id, e.target.value)}
-                            placeholder={!hasAmount(r) ? debitHint : ""}
-                            title={!hasAmount(r) && debitHint ? `Baqi: ${debitHint}` : undefined}
                             className="h-9 text-sm text-right border-gray-300"
                           />
                         </td>
@@ -679,8 +589,6 @@ export default function JournalVoucher() {
                             min="0"
                             value={r.credit}
                             onChange={(e) => setCredit(r.id, e.target.value)}
-                            placeholder={!hasAmount(r) ? creditHint : ""}
-                            title={!hasAmount(r) && creditHint ? `Baqi: ${creditHint}` : undefined}
                             className="h-9 text-sm text-right border-gray-300"
                           />
                         </td>
@@ -750,15 +658,10 @@ export default function JournalVoucher() {
                   />
                 </div>
 
-                {canSubmit ? (
+                {isBalanced ? (
                   <div className="flex items-center gap-2 bg-green-100 text-green-800 border border-green-300 px-3 py-1.5 rounded-md text-sm font-medium">
                     <Check className="w-4 h-4" />
                     Balanced (Debit = Credit)
-                  </div>
-                ) : isBalanced ? (
-                  <div className="flex items-center gap-2 bg-amber-100 text-amber-800 border border-amber-300 px-3 py-1.5 rounded-md text-sm font-medium">
-                    <AlertTriangle className="w-4 h-4" />
-                    Equal hai — ab har amount wali row mein Account select karo
                   </div>
                 ) : (
                   <div className="flex items-center gap-2 bg-red-100 text-red-800 border border-red-300 px-3 py-1.5 rounded-md text-sm font-medium">
@@ -774,14 +677,14 @@ export default function JournalVoucher() {
               <div className="mt-5 flex items-center gap-3">
                 <Button
                   onClick={saveVoucher}
-                  disabled={saving || !canSubmit}
+                  disabled={saving || !isBalanced}
                   className="bg-blue-600 hover:bg-blue-700 text-white px-10"
                 >
                   {saving ? "Saving..." : isEditMode ? "Update" : "Save"}
                 </Button>
                 <Button
                   onClick={handlePrint}
-                  disabled={!canSubmit}
+                  disabled={!isBalanced}
                   variant="outline"
                   className="border-gray-400 text-black hover:bg-gray-100 bg-transparent"
                 >
@@ -823,7 +726,7 @@ export default function JournalVoucher() {
                   <th className="border border-gray-400 px-1.5 py-1 text-left">S.No</th>
                   <th className="border border-gray-400 px-1.5 py-1 text-left">Code</th>
                   <th className="border border-gray-400 px-1.5 py-1 text-left">Account</th>
-                  <th className="border border-gray-400 px-1.5 py-1 text-left">Narration</th>
+                  <th className="border border-gray-400 px-1.5 py-1 text-left">Bill Ref</th>
                   <th className="border border-gray-400 px-1.5 py-1 text-right">Debit</th>
                   <th className="border border-gray-400 px-1.5 py-1 text-right">Credit</th>
                   <th className="border border-gray-400 px-1.5 py-1 text-left">Cheque No</th>
@@ -837,7 +740,7 @@ export default function JournalVoucher() {
                     <td className="border border-gray-300 px-1.5 py-1 align-top">{i + 1}</td>
                     <td className="border border-gray-300 px-1.5 py-1 align-top">{r.accountCode}</td>
                     <td className="border border-gray-300 px-1.5 py-1 align-top">{r.accountName}</td>
-                    <td className="border border-gray-300 px-1.5 py-1 align-top">{r.narration || "-"}</td>
+                    <td className="border border-gray-300 px-1.5 py-1 align-top">{r.billReference || "-"}</td>
                     <td className="border border-gray-300 px-1.5 py-1 align-top text-right">
                       {toCents(r.debit) > 0 ? formatAmount(r.debit) : "-"}
                     </td>

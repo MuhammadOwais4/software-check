@@ -16,6 +16,8 @@ import CashReceiptVoucher from "@/pages/Accounts/Cash-Receipt-Voucher/Cash-Recei
 import BankPaymentVoucher from "@/pages/Accounts/Bank-Payment-Voucher/Bank-Payment-Voucher";
 import BankReceiptVoucher from "@/pages/Accounts/Bank-Receipt-Voucher/Bank-Receipt-Voucher";
 import Dashboard from "@/pages/Dashboard/Dashboard.jsx";
+import ShopSwitcher from "@/components/components/ShopSwitcher";
+import ChangePassword from "@/components/components/ChangePassword";
 import Icon from "@/assets/icon.png";
 
 const ACCOUNT_ITEMS = [
@@ -89,8 +91,10 @@ export default function UserDashboard() {
             </div>
           </div>
           <div className="flex items-center gap-3">
+            <ShopSwitcher />
             <span className="text-xs bg-emerald-100 text-emerald-700 font-bold px-3 py-1 rounded-full">USER</span>
             <span className="text-sm text-gray-600 hidden sm:block font-medium">{user?.username}</span>
+            <ChangePassword />
             <button
               onClick={() => { logout(); navigate("/login", { replace: true }); }}
               className="text-sm bg-gray-800 hover:bg-gray-900 text-white px-4 py-2 rounded-lg font-medium transition-colors"

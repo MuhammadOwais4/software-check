@@ -34,8 +34,12 @@ const voucherEntrySchema = new mongoose.Schema({
   },
   pairId: {
     type: Number,
-    required: true,
+    default: 0,
   },
+  // Journal Voucher table extra columns
+  billReference: { type: String, trim: true },
+  chequeNo: { type: String, trim: true },
+  chequeDate: { type: Date },
 })
 
 const voucherSchema = new mongoose.Schema(

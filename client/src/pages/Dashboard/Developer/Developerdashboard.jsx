@@ -34,6 +34,8 @@ import StockLedger from "@/pages/Stockledger/Stockledger";
 import FabricStockSheet from "@/pages/Accounts/Fabricstocksheet/Fabricstocksheet";
 import RawMaterialPage from "@/pages/Master-Profile/Rawmaterial";
 import FinishedGoodPage from "@/pages/Master-Profile/Finishedgood/Finishedgood";
+import ShopSwitcher from "@/components/components/ShopSwitcher";
+import ChangePassword from "@/components/components/ChangePassword";
 import Icon from "@/assets/icon.png";
 
 const MASTER_PROFILE_ITEMS = [
@@ -171,8 +173,10 @@ export default function DeveloperDashboard() {
             </div>
           </div>
           <div className="flex items-center gap-3">
+            <ShopSwitcher />
             <span className="text-xs bg-violet-100 text-violet-700 font-bold px-3 py-1 rounded-full">DEVELOPER</span>
             <span className="text-sm text-gray-600 hidden sm:block font-medium">{user?.username}</span>
+            <ChangePassword />
             <button
               onClick={() => { logout(); navigate("/login", { replace: true }); }}
               className="text-sm bg-gray-800 hover:bg-gray-900 text-white px-4 py-2 rounded-lg font-medium transition-colors"
