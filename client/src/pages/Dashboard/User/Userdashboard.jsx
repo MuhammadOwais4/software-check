@@ -32,10 +32,6 @@ const REPORT_ITEMS = [
 ];
 
 const ACCOUNT_ITEMS = [
-  { key: "Cash Payment Voucher", label: "Cash Payment Voucher" },
-  { key: "Cash Receipt Voucher", label: "Cash Receipt Voucher" },
-  { key: "Bank Payment Voucher", label: "Bank Payment Voucher" },
-  { key: "Bank Receipt Voucher", label: "Bank Receipt Voucher" },
   { key: "Journal Voucher",      label: "Journal Voucher" },
 ];
 
