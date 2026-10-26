@@ -163,7 +163,6 @@ export default function AdminDashboard() {
       <main className="max-w-screen-2xl mx-auto px-4 py-6">
         <div className="mb-6 border-b border-gray-200 bg-white rounded-t-xl px-4">
           <nav className="-mb-px flex flex-wrap">
-            <NavBtn tab="dashboard" label="Dashboard" />
             <NavBtn tab="users-shops" label="Users & Shops" />
             <DropdownBtn
               label="Reports"
@@ -213,7 +212,7 @@ export default function AdminDashboard() {
           </nav>
         </div>
 
-        {activeTab === "dashboard"          && <Dashboard products={products} expenses={expenses} sales={sales} notifications={notifications} onTabChange={setActiveTab} />}
+
         {activeTab === "reports"            && <Reports products={products} expenses={expenses} sales={sales} />}
         {activeTab === "General Ledger"     && <GeneralLedger />}
         {activeTab === "Trial Balance"      && <TrialBalance />}

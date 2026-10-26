@@ -124,10 +124,6 @@ export default function UserDashboard() {
       <main className="max-w-screen-2xl mx-auto px-4 py-6">
         <div className="mb-6 border-b border-gray-200 bg-white rounded-t-xl px-4">
           <nav className="-mb-px flex flex-wrap">
-            <NavBtn tab="dashboard" label="Dashboard" />
-            <NavBtn tab="stock"     label="Goods Receipt Note" />
-            <NavBtn tab="sales"     label="Sales Tracking" />
-
             {/* Reports */}
             <div className="relative" ref={reportsRef}>
               <button
@@ -219,28 +215,9 @@ export default function UserDashboard() {
             </div>
 
             {/* Notifications */}
-            <button
-              className={`relative whitespace-nowrap py-4 px-3 border-b-2 font-medium text-sm transition-colors ${
-                activeTab === "notifications"
-                  ? "border-emerald-500 text-emerald-600"
-                  : "border-transparent text-gray-500 hover:text-gray-700"
-              }`}
-              onClick={() => setActiveTab("notifications")}
-            >
-              Notifications
-              {notifications.length > 0 && (
-                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
-                  {notifications.length}
-                </span>
-              )}
-            </button>
           </nav>
         </div>
 
-        {activeTab === "dashboard"            && <Dashboard products={products} sales={sales} notifications={notifications} onTabChange={setActiveTab} />}
-        {activeTab === "stock"                && <StockManagement onStockUpdate={setProducts} onNotification={n => setNotifications(p => [...p, n])} />}
-        {activeTab === "sales"                && <SalesTracking products={products} onSaleComplete={setSales} onNotification={n => setNotifications(p => [...p, n])} />}
-    
         {activeTab === "General Ledger"       && <GeneralLedger />}
         {activeTab === "Trial Balance"        && <TrialBalance />}
         {activeTab === "JV Account Report"    && <JVAccountReport onOpenJV={(id) => setActiveTab("JV Detail:" + id)} />}
@@ -259,17 +236,7 @@ export default function UserDashboard() {
             {chartPage === "revenue"     && <RevenuePage />}
           </>
         )}
-        {activeTab === "Cash Payment Voucher" && <CashPaymentVoucher />}
-        {activeTab === "Cash Receipt Voucher" && <CashReceiptVoucher />}
-        {activeTab === "Bank Payment Voucher" && <BankPaymentVoucher />}
-        {activeTab === "Bank Receipt Voucher" && <BankReceiptVoucher />}
         {activeTab === "Journal Voucher"      && <JournalVoucher />}
-        {activeTab === "notifications"        && (
-          <Notifications
-            notifications={notifications}
-            onDismiss={id => setNotifications(p => p.filter(n => n.id !== id))}
-          />
-        )}
       </main>
     </div>
   );
