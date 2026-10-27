@@ -26,9 +26,7 @@ const newRow = () => ({
   narration: "", // separate narration for every row
   debit: "",
   credit: "",
-  chequeNo: "",
-  chequeDate: "",
-  remarks: "",
+  billNo: "", // bill number of this row
 })
 
 const initialRows = () => [newRow(), newRow()]
@@ -168,7 +166,6 @@ function AccountCodeCell({ value, accounts, onSelect, focusSignal = 0 }) {
 export default function JournalVoucher() {
   const [voucherNo, setVoucherNo] = useState("")
   const [voucherDate, setVoucherDate] = useState("")
-  const [billNo, setBillNo] = useState("")
   const [rows, setRows] = useState(initialRows())
   const [accountOptions, setAccountOptions] = useState([])
   const [loading, setLoading] = useState(false)
@@ -316,7 +313,6 @@ export default function JournalVoucher() {
     setRows(initialRows())
     setVoucherNo(generateUniqueVoucherNo())
     setVoucherDate(new Date().toISOString().split("T")[0])
-    setBillNo("")
     setIsEditMode(false)
     setEditingVoucherId(null)
   }
@@ -327,12 +323,9 @@ export default function JournalVoucher() {
     setEditingVoucherId(voucher._id)
     setVoucherNo(voucher.voucherNo)
     setVoucherDate(new Date(voucher.voucherDate).toISOString().split("T")[0])
-    setBillNo(voucher.billNo || "")
 
     const loaded = (voucher.entries || []).map((e, i) => {
       const [code, ...rest] = (e.account || "").split(" - ")
-      // Vouchers saved with a separate entry narration keep the old description as remarks
-      const hasEntryNarration = !!e.narration
       return {
         id: e.id || e._id || `loaded-${Date.now()}-${i}-${Math.floor(Math.random() * 1000000)}`,
         accountCode: code || "",
@@ -340,9 +333,7 @@ export default function JournalVoucher() {
         narration: e.narration || e.description || "",
         debit: e.debitAmount > 0 ? String(e.debitAmount) : "",
         credit: e.creditAmount > 0 ? String(e.creditAmount) : "",
-        chequeNo: e.chequeNo || "",
-        chequeDate: e.chequeDate ? String(e.chequeDate).split("T")[0] : "",
-        remarks: hasEntryNarration ? e.description || "" : "",
+        billNo: e.billNo || voucher.billNo || "",
       }
     })
     setRows(loaded.length >= 2 ? loaded : [...loaded, ...initialRows().slice(loaded.length)])
@@ -415,9 +406,8 @@ export default function JournalVoucher() {
         debitAmount: isDebit ? Number.parseFloat(r.debit) : 0,
         creditAmount: isDebit ? 0 : Number.parseFloat(r.credit),
         entryType: isDebit ? "debit" : "credit",
-        description: (r.narration || r.remarks || "").trim(), // each row keeps its own narration
-        chequeNo: r.chequeNo,
-        chequeDate: r.chequeDate || null,
+        description: (r.narration || "").trim(), // each row keeps its own narration
+        billNo: (r.billNo || "").trim(),
       }
     })
 
@@ -432,7 +422,7 @@ export default function JournalVoucher() {
         voucherType: "JV",
         voucherDate: new Date(voucherDate),
         narration,
-        billNo: billNo.trim(),
+        billNo: [...new Set(entries.map((e) => e.billNo).filter(Boolean))].join(", "), // list/search
         entries,
       }
 
@@ -590,7 +580,7 @@ export default function JournalVoucher() {
               )}
 
               {/* Voucher no + date */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                 <div className="space-y-2">
                   <Label htmlFor="voucher-no" className="text-sm font-semibold text-gray-700">
                     GL No.
@@ -615,18 +605,6 @@ export default function JournalVoucher() {
                     className="border-gray-300"
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="bill-no" className="text-sm font-semibold text-gray-700">
-                    Bill No.
-                  </Label>
-                  <Input
-                    id="bill-no"
-                    value={billNo}
-                    onChange={(e) => setBillNo(e.target.value)}
-                    placeholder="Bill No (optional)"
-                    className="border-gray-300"
-                  />
-                </div>
               </div>
 
               <div className="mb-3 flex justify-between items-center">
@@ -643,7 +621,7 @@ export default function JournalVoucher() {
 
               {/* ---------- ENTRY TABLE ---------- */}
               <div className="border border-gray-300 rounded-md overflow-x-auto">
-                <table className="w-full min-w-[1050px] text-sm">
+                <table className="w-full min-w-[900px] text-sm">
                   <thead className="bg-gray-50">
                     <tr className="text-center text-gray-700">
                       <th className="px-2 py-3 border-r border-gray-200 w-44">AccountCode</th>
@@ -651,9 +629,7 @@ export default function JournalVoucher() {
                       <th className="px-2 py-3 border-r border-gray-200 w-56">Narration</th>
                       <th className="px-2 py-3 border-r border-gray-200 w-32">Debit</th>
                       <th className="px-2 py-3 border-r border-gray-200 w-32">Credit</th>
-                      <th className="px-2 py-3 border-r border-gray-200 w-32">Cheque No</th>
-                      <th className="px-2 py-3 border-r border-gray-200 w-36">Cheque Date</th>
-                      <th className="px-2 py-3 border-r border-gray-200">Remarks</th>
+                      <th className="px-2 py-3 border-r border-gray-200 w-40">Bill No</th>
                       <th className="px-2 py-3 w-14">Rem</th>
                     </tr>
                   </thead>
@@ -710,24 +686,9 @@ export default function JournalVoucher() {
                         </td>
                         <td className="p-2 border-r border-gray-200">
                           <Input
-                            value={r.chequeNo}
-                            onChange={(e) => updateRow(r.id, { chequeNo: e.target.value })}
-                            className="h-9 text-sm border-gray-300"
-                          />
-                        </td>
-                        <td className="p-2 border-r border-gray-200">
-                          <Input
-                            type="date"
-                            value={r.chequeDate}
-                            onChange={(e) => updateRow(r.id, { chequeDate: e.target.value })}
-                            className="h-9 text-sm border-gray-300"
-                          />
-                        </td>
-                        <td className="p-2 border-r border-gray-200">
-                          <Input
-                            value={r.remarks}
-                            onChange={(e) => updateRow(r.id, { remarks: e.target.value })}
-                            placeholder="Remarks"
+                            value={r.billNo}
+                            onChange={(e) => updateRow(r.id, { billNo: e.target.value })}
+                            placeholder="Bill No"
                             className="h-9 text-sm border-gray-300"
                           />
                         </td>
@@ -830,14 +791,10 @@ export default function JournalVoucher() {
               <p className="text-xs text-gray-700">Journal Voucher (GL)</p>
             </header>
 
-            <section className="grid grid-cols-3 gap-2 text-xs mb-3">
+            <section className="grid grid-cols-2 gap-2 text-xs mb-3">
               <div>
                 <span className="font-semibold">Voucher No: </span>
                 {voucherNo}
-              </div>
-              <div className="text-center">
-                <span className="font-semibold">Bill No: </span>
-                {billNo || "-"}
               </div>
               <div className="text-right">
                 <span className="font-semibold">Date: </span>
@@ -854,9 +811,7 @@ export default function JournalVoucher() {
                   <th className="border border-gray-400 px-1.5 py-1 text-left">Narration</th>
                   <th className="border border-gray-400 px-1.5 py-1 text-right">Debit</th>
                   <th className="border border-gray-400 px-1.5 py-1 text-right">Credit</th>
-                  <th className="border border-gray-400 px-1.5 py-1 text-left">Cheque No</th>
-                  <th className="border border-gray-400 px-1.5 py-1 text-left">Cheque Date</th>
-                  <th className="border border-gray-400 px-1.5 py-1 text-left">Remarks</th>
+                  <th className="border border-gray-400 px-1.5 py-1 text-left">Bill No</th>
                 </tr>
               </thead>
               <tbody>
@@ -872,11 +827,7 @@ export default function JournalVoucher() {
                     <td className="border border-gray-300 px-1.5 py-1 align-top text-right">
                       {toCents(r.credit) > 0 ? formatAmount(r.credit) : "-"}
                     </td>
-                    <td className="border border-gray-300 px-1.5 py-1 align-top">{r.chequeNo || "-"}</td>
-                    <td className="border border-gray-300 px-1.5 py-1 align-top">
-                      {r.chequeDate ? formatDate(r.chequeDate) : "-"}
-                    </td>
-                    <td className="border border-gray-300 px-1.5 py-1 align-top">{r.remarks || "-"}</td>
+                    <td className="border border-gray-300 px-1.5 py-1 align-top">{r.billNo || "-"}</td>
                   </tr>
                 ))}
                 <tr>
@@ -889,7 +840,7 @@ export default function JournalVoucher() {
                   <td className="border border-gray-400 px-1.5 py-1 text-right font-semibold">
                     {formatAmount(totalCredit)}
                   </td>
-                  <td className="border border-gray-400 px-1.5 py-1" colSpan={3}></td>
+                  <td className="border border-gray-400 px-1.5 py-1"></td>
                 </tr>
               </tbody>
             </table>
