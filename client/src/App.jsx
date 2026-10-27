@@ -4,6 +4,7 @@ import Login from "./pages/Login/Login";
 import AdminDashboard from "./pages/Dashboard/Admin/Admindashboard";
 import DeveloperDashboard from "./pages/Dashboard/Developer/Developerdashboard";
 import UserDashboard from "./pages/Dashboard/User/Userdashboard";
+import ReminderNotes from "./components/components/ReminderNotes";
 
 function LoadingScreen() {
   return (
@@ -88,6 +89,7 @@ export default function App() {
           <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
       </BrowserRouter>
+      <ReminderNotes />
     </AuthProvider>
   );
 }

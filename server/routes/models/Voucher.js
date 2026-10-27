@@ -64,6 +64,8 @@ const voucherSchema = new mongoose.Schema(
       required: true,
       trim: true,
     },
+    // Bill number of the party bill this voucher belongs to (optional)
+    billNo: { type: String, trim: true, default: "" },
     entries: [voucherEntrySchema],
     totalDebit: {
       type: Number,

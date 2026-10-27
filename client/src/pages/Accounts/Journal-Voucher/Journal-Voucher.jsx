@@ -168,6 +168,7 @@ function AccountCodeCell({ value, accounts, onSelect, focusSignal = 0 }) {
 export default function JournalVoucher() {
   const [voucherNo, setVoucherNo] = useState("")
   const [voucherDate, setVoucherDate] = useState("")
+  const [billNo, setBillNo] = useState("")
   const [rows, setRows] = useState(initialRows())
   const [accountOptions, setAccountOptions] = useState([])
   const [loading, setLoading] = useState(false)
@@ -315,6 +316,7 @@ export default function JournalVoucher() {
     setRows(initialRows())
     setVoucherNo(generateUniqueVoucherNo())
     setVoucherDate(new Date().toISOString().split("T")[0])
+    setBillNo("")
     setIsEditMode(false)
     setEditingVoucherId(null)
   }
@@ -325,6 +327,7 @@ export default function JournalVoucher() {
     setEditingVoucherId(voucher._id)
     setVoucherNo(voucher.voucherNo)
     setVoucherDate(new Date(voucher.voucherDate).toISOString().split("T")[0])
+    setBillNo(voucher.billNo || "")
 
     const loaded = (voucher.entries || []).map((e, i) => {
       const [code, ...rest] = (e.account || "").split(" - ")
@@ -429,6 +432,7 @@ export default function JournalVoucher() {
         voucherType: "JV",
         voucherDate: new Date(voucherDate),
         narration,
+        billNo: billNo.trim(),
         entries,
       }
 
@@ -549,6 +553,11 @@ export default function JournalVoucher() {
                           >
                             <div>
                               <span className="font-semibold text-gray-800">{voucher.voucherNo}</span>
+                              {voucher.billNo && (
+                                <span className="text-xs bg-blue-100 text-blue-700 font-semibold px-2 py-0.5 rounded-full ml-3">
+                                  Bill: {voucher.billNo}
+                                </span>
+                              )}
                               <span className="text-sm text-gray-600 ml-3">{formatDate(voucher.voucherDate)}</span>
                               <p className="text-sm text-gray-600 mt-1">{voucher.narration}</p>
                             </div>
@@ -581,7 +590,7 @@ export default function JournalVoucher() {
               )}
 
               {/* Voucher no + date */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
                 <div className="space-y-2">
                   <Label htmlFor="voucher-no" className="text-sm font-semibold text-gray-700">
                     GL No.
@@ -603,6 +612,18 @@ export default function JournalVoucher() {
                     type="date"
                     value={voucherDate}
                     onChange={(e) => setVoucherDate(e.target.value)}
+                    className="border-gray-300"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="bill-no" className="text-sm font-semibold text-gray-700">
+                    Bill No.
+                  </Label>
+                  <Input
+                    id="bill-no"
+                    value={billNo}
+                    onChange={(e) => setBillNo(e.target.value)}
+                    placeholder="Bill No (optional)"
                     className="border-gray-300"
                   />
                 </div>
@@ -809,10 +830,14 @@ export default function JournalVoucher() {
               <p className="text-xs text-gray-700">Journal Voucher (GL)</p>
             </header>
 
-            <section className="grid grid-cols-2 gap-2 text-xs mb-3">
+            <section className="grid grid-cols-3 gap-2 text-xs mb-3">
               <div>
                 <span className="font-semibold">Voucher No: </span>
                 {voucherNo}
+              </div>
+              <div className="text-center">
+                <span className="font-semibold">Bill No: </span>
+                {billNo || "-"}
               </div>
               <div className="text-right">
                 <span className="font-semibold">Date: </span>

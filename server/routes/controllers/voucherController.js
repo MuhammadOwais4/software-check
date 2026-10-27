@@ -77,7 +77,7 @@ const getVoucherById = async (req, res) => {
 // Create new voucher
 const createVoucher = async (req, res) => {
   try {
-    const { voucherType, voucherDate, narration, entries } = req.body
+    const { voucherType, voucherDate, narration, entries, billNo } = req.body
 
     // Generate voucher number if not provided
     const voucherNo = req.body.voucherNo || generateVoucherNumber(voucherType)
@@ -113,6 +113,7 @@ const createVoucher = async (req, res) => {
       voucherType,
       voucherDate,
       narration,
+      billNo: billNo || "",
       entries: processedEntries,
       totalDebit,
       totalCredit,
@@ -129,7 +130,7 @@ const createVoucher = async (req, res) => {
 const updateVoucher = async (req, res) => {
   try {
     const { id } = req.params
-    const { voucherDate, narration, entries } = req.body
+    const { voucherDate, narration, entries, billNo } = req.body
 
     const voucher = await Voucher.findById(id)
     if (!voucher) {
@@ -164,6 +165,7 @@ const updateVoucher = async (req, res) => {
 
     voucher.voucherDate = voucherDate
     voucher.narration = narration
+    if (billNo !== undefined) voucher.billNo = billNo
     voucher.entries = processedEntries
     voucher.totalDebit = totalDebit
     voucher.totalCredit = totalCredit

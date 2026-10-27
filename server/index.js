@@ -82,6 +82,7 @@ app.use("/api", authAndShop)
 
 // ---------- Routes ----------
 app.use("/api/shops", require("./routes/shopRoutes"))
+app.use("/api/notes", require("./routes/noteRoutes"))
 app.use("/api/products", require("./routes/productRoutes"))
 app.use("/api/sale-discount", require("./routes/sale-discount-Routes"))
 app.use("/api/purchases-discount", require("./routes/purchases-discount-Routes"))
