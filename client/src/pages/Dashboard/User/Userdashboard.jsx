@@ -18,6 +18,7 @@ import BankReceiptVoucher from "@/pages/Accounts/Bank-Receipt-Voucher/Bank-Recei
 import JournalVoucher from "@/pages/Accounts/Journal-Voucher/Journal-Voucher";
 import GeneralLedger from "@/pages/Accounts/Genreal-Leager/Genreal-Leager";
 import TrialBalance from "@/pages/Accounts/TrialBalance/TrialBalance";
+import OpeningTrialBalance from "@/pages/Accounts/Opening-Trial-Balance/Opening-Trial-Balance";
 import JVAccountReport from "@/pages/reports/JV-Account-Report/JV-Account-Report";
 import JVDetail from "@/pages/reports/JV-Account-Report/JV-Detail";
 import Dashboard from "@/pages/Dashboard/Dashboard.jsx";
@@ -28,6 +29,7 @@ import Icon from "@/assets/icon.png";
 const REPORT_ITEMS = [
   { key: "General Ledger",    label: "General Ledger" },
   { key: "Trial Balance",     label: "Trial Balance" },
+  { key: "Opening Trial Balance", label: "Opening Trial Balance" },
   { key: "JV Account Report", label: "JV Account Report" },
 ];
 
@@ -216,6 +218,7 @@ export default function UserDashboard() {
 
         {activeTab === "General Ledger"       && <GeneralLedger />}
         {activeTab === "Trial Balance"        && <TrialBalance />}
+        {activeTab === "Opening Trial Balance" && <OpeningTrialBalance />}
         {activeTab === "JV Account Report"    && <JVAccountReport onOpenJV={(id) => setActiveTab("JV Detail:" + id)} />}
         {activeTab.startsWith("JV Detail:")   && (
           <JVDetail

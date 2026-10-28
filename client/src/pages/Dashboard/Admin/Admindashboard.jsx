@@ -21,6 +21,7 @@ import BankPaymentVoucher from "@/pages/Accounts/Bank-Payment-Voucher/Bank-Payme
 import BankReceiptVoucher from "@/pages/Accounts/Bank-Receipt-Voucher/Bank-Receipt-Voucher";
 import GeneralLedger from "@/pages/Accounts/Genreal-Leager/Genreal-Leager";
 import TrialBalance from "@/pages/Accounts/TrialBalance/TrialBalance";
+import OpeningTrialBalance from "@/pages/Accounts/Opening-Trial-Balance/Opening-Trial-Balance";
 import VoucherQuery from "@/pages/Accounts/Voucher-Query/Voucher-Query";
 import JVAccountReport from "@/pages/reports/JV-Account-Report/JV-Account-Report";
 import JVDetail from "@/pages/reports/JV-Account-Report/JV-Detail";
@@ -39,6 +40,7 @@ import Icon from "@/assets/icon.png";
 const REPORT_ITEMS = [
   { key: "General Ledger",     label: "General Ledger" },
   { key: "Trial Balance",      label: "Trial Balance" },
+  { key: "Opening Trial Balance", label: "Opening Trial Balance" },
   { key: "JV Account Report",  label: "JV Account Report" },
 ];
 
@@ -216,6 +218,7 @@ export default function AdminDashboard() {
         {activeTab === "reports"            && <Reports products={products} expenses={expenses} sales={sales} />}
         {activeTab === "General Ledger"     && <GeneralLedger />}
         {activeTab === "Trial Balance"      && <TrialBalance />}
+        {activeTab === "Opening Trial Balance" && <OpeningTrialBalance />}
         {activeTab === "JV Account Report"  && <JVAccountReport onOpenJV={(id) => setActiveTab("JV Detail:" + id)} />}
         {activeTab.startsWith("JV Detail:") && (
           <JVDetail

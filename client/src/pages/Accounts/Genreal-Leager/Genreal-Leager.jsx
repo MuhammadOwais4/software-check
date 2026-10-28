@@ -149,7 +149,7 @@ export default function GeneralLedger() {
     Sale:"#dcfce7:#15803d", Purchase:"#ffedd5:#c2410c", SPV:"#fee2e2:#b91c1c",
     CRV:"#dbeafe:#1d4ed8", OHV:"#fef9c3:#92400e", WHT:"#f3e8ff:#6b21a8",
     "Sale Return":"#fce7f3:#be185d", "Purchase Return":"#fff7ed:#9a3412",
-    "Sale Discount":"#ecfdf5:#065f46", "Purchase Discount":"#f0f9ff:#0369a1", JV:"#f1f5f9:#475569",
+    "Opening Balance":"#fef3c7:#92400e", "Sale Discount":"#ecfdf5:#065f46", "Purchase Discount":"#f0f9ff:#0369a1", JV:"#f1f5f9:#475569",
   }
 
   // ═══════════════════════ LEDGER VIEW ═══════════════════════════
@@ -215,7 +215,7 @@ export default function GeneralLedger() {
                   const bal = formatBalance(runningNets[idx])
                   const narr = entry.narration ?? entry.description
                   return (
-                    <tr key={entry.id||idx} style={{ background: idx%2===0?"#fff":"#f7fafd", borderBottom:"1px solid #e5eaf0" }}>
+                    <tr key={entry.id||idx} style={{ background: entry.voucherType==="Opening Balance" ? "#fffbeb" : idx%2===0?"#fff":"#f7fafd", borderBottom:"1px solid #e5eaf0", fontWeight: entry.voucherType==="Opening Balance" ? 700 : undefined }}>
                       <td style={{ padding:"5px 10px", textAlign:"center", color:"#94a3b8", fontFamily:"'Courier New',monospace", fontWeight:700 }}>{idx+1}</td>
                       <td style={{ padding:"5px 10px", whiteSpace:"nowrap" }}>{formatDate(entry.date)}</td>
                       <td style={{ padding:"5px 10px", fontFamily:"'Courier New',monospace", fontWeight:600 }}>{entry.voucherNo}</td>

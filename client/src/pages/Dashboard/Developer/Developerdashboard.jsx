@@ -21,6 +21,7 @@ import BankPaymentVoucher from "@/pages/Accounts/Bank-Payment-Voucher/Bank-Payme
 import BankReceiptVoucher from "@/pages/Accounts/Bank-Receipt-Voucher/Bank-Receipt-Voucher";
 import GeneralLedger from "@/pages/Accounts/Genreal-Leager/Genreal-Leager";
 import TrialBalance from "@/pages/Accounts/TrialBalance/TrialBalance";
+import OpeningTrialBalance from "@/pages/Accounts/Opening-Trial-Balance/Opening-Trial-Balance";
 import VoucherQuery from "@/pages/Accounts/Voucher-Query/Voucher-Query";
 import Dashboard from "@/pages/Dashboard/Dashboard.jsx";
 import SalesDiscountVouchers from "@/pages/Accounts/Sales-Discount-Vouchers/Sales-Discount-Vouchers";
@@ -47,6 +48,7 @@ const MASTER_PROFILE_ITEMS = [
 const REPORT_ITEMS = [
   { key: "General Ledger",     label: "General Ledger" },
   { key: "Trial Balance",      label: "Trial Balance" },
+  { key: "Opening Trial Balance", label: "Opening Trial Balance" },
   { key: "Balance Sheet",      label: "Balance Sheet" },
   { key: "ProfitLoss",         label: "Profit & Loss" },
   { key: "reports",            label: "Business Reports" },
@@ -265,6 +267,7 @@ export default function DeveloperDashboard() {
         {activeTab === "reports"            && <Reports products={products} expenses={expenses} sales={sales} />}
         {activeTab === "General Ledger"     && <GeneralLedger />}
         {activeTab === "Trial Balance"      && <TrialBalance />}
+        {activeTab === "Opening Trial Balance" && <OpeningTrialBalance />}
         {activeTab === "Balance Sheet"      && <BalanceSheet />}
         {activeTab === "ProfitLoss"         && <ProfitLoss />}
         {activeTab === "Product Management" && <ProductManagementDashboard />}

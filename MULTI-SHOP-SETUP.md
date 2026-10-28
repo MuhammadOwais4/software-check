@@ -19,3 +19,9 @@ Journal Voucher
 - Total Debit must equal Total Credit: Save/Print stay disabled until equal; the server also rejects unbalanced JVs.
 - "Add More" pre-fills the remaining difference on the opposite side.
 - Print = compact A5 landscape.
+
+Opening Trial Balance
+- Menu: Reports -> "Opening Trial Balance". Lists EVERY chart-of-accounts account (new accounts appear automatically).
+- Type the opening balance manually: Debit or Credit (one of them). Per row: Edit / Save / Delete.
+- It is used only for the first row ("Opening Balance") of each account's General Ledger: Debit stays Debit, Credit stays Credit.
+- Not stored as a ledger transaction, so vouchers/reports are not affected. Each shop has its own set.

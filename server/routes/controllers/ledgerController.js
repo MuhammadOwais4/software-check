@@ -12,6 +12,7 @@ const PurchasesDiscount = require("../models/Purchases-discount")
 const { SupplierPaymentVoucher } = require("../models/Supplierpaymentvouchers")
 const { CustomerReceiptVoucher } = require("../models/CustomerReceiptVoucher")
 const OverheadVoucher = require("../models/Overheadcategory")
+const OpeningBalance = require("../models/OpeningBalance")
 
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -130,6 +131,10 @@ const getAllAccounts = async (req, res) => {
       HARDCODED_TAX_ACCOUNTS.filter(t => t.type === "TAX-ADVANCE").forEach(t => allAccounts.push({ ...t }))
     }
 
+    const openingRows = await OpeningBalance.find({}).lean()
+    const openingMap = {}
+    openingRows.forEach((o) => { openingMap[`${o.accountCategory}::${o.accountCode}`] = o })
+
     for (const account of allAccounts) {
       try {
         const searchCriteria = account.code === "SALES-DISC" || account.code === "PURCH-DISC"
@@ -137,8 +142,12 @@ const getAllAccounts = async (req, res) => {
           : { accountCode: account.code }
         const ledgerEntries = await Ledger.find(searchCriteria)
           .sort({ date: 1, createdAt: 1 }).select("debit credit balance").lean()
-        if (ledgerEntries.length > 0)
+        if (ledgerEntries.length > 0) {
           account.balance = ledgerEntries[ledgerEntries.length - 1].balance || 0
+        } else {
+          const ob = openingMap[`${account.category}::${account.code}`]
+          if (ob) account.balance = account.normalBalance === "debit" ? ob.debit - ob.credit : ob.credit - ob.debit
+        }
       } catch (err) {
         console.error(`❌ Balance error for ${account.code}:`, err.message)
       }
@@ -662,6 +671,31 @@ const getAccountLedger = async (req, res) => {
     // ══════════════════════════════════════════════════════════════════════════
     ledgerEntries.sort((a, b) => new Date(a.date) - new Date(b.date))
 
+    // ── OPENING BALANCE: always the FIRST row of the ledger ──────────────────
+    // Entered manually in "Opening Trial Balance". Debit stays debit, credit stays credit.
+    let openingSigned = 0
+    try {
+      const opening = await OpeningBalance.findOne({ accountCode: finalAccountCode, accountCategory }).lean()
+      if (opening && (opening.debit > 0 || opening.credit > 0)) {
+        ledgerEntries.unshift({
+          id: `opening-${finalAccountCode}`,
+          isOpening: true,
+          date: from,
+          voucherNo: "OPENING",
+          voucherType: "Opening Balance",
+          description: "Opening Balance",
+          debit: opening.debit || 0,
+          credit: opening.credit || 0,
+          balance: 0,
+          grn: null,
+          sourceId: opening._id,
+        })
+        openingSigned = normalBalance === "debit" ? (opening.debit || 0) - (opening.credit || 0) : (opening.credit || 0) - (opening.debit || 0)
+      }
+    } catch (obErr) {
+      console.error("Opening balance lookup error:", obErr.message)
+    }
+
     runningBalance = 0
     let serialNumber = 1
     const ledgerDocsToSave = []
@@ -671,6 +705,7 @@ const getAccountLedger = async (req, res) => {
         ? entry.debit - entry.credit
         : entry.credit - entry.debit
       entry.balance = runningBalance
+      if (entry.isOpening) return // opening row is only shown, never stored as a ledger transaction
 
       let srcType = "Voucher"
       if      (entry.id.includes("ohv"))               srcType = "OverheadVoucher"
@@ -725,7 +760,7 @@ const getAccountLedger = async (req, res) => {
       count: ledgerEntries.length,
       data: {
         entries: ledgerEntries,
-        summary: { openingBalance: 0, totalDebits, totalCredits, closingBalance: runningBalance },
+        summary: { openingBalance: openingSigned, totalDebits, totalCredits, closingBalance: runningBalance },
       },
     })
   } catch (error) {
