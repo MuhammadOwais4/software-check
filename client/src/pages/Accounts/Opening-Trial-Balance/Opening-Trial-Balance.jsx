@@ -37,6 +37,7 @@ export default function OpeningTrialBalance() {
   const [editKey, setEditKey] = useState(null)
   const [draft, setDraft] = useState({ debit: "", credit: "", date: "" })
   const [saving, setSaving] = useState(false)
+  const [openingDate, setOpeningDate] = useState("") // chosen by the user, never filled automatically
   const [msg, setMsg] = useState(null)
 
   const flash = (ok, text) => {
@@ -79,7 +80,7 @@ export default function OpeningTrialBalance() {
     setDraft({
       debit: r.debit > 0 ? String(r.debit) : "",
       credit: r.credit > 0 ? String(r.credit) : "",
-      date: r.openingDate ? String(r.openingDate).split("T")[0] : "",
+      date: r.openingDate ? String(r.openingDate).split("T")[0] : openingDate,
     })
   }
   const cancelEdit = () => {
@@ -140,6 +141,25 @@ export default function OpeningTrialBalance() {
       {msg && (
         <div className={`px-4 py-2 rounded-lg text-sm ${msg.ok ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}`}>{msg.text}</div>
       )}
+
+      {/* opening date - selected by the user */}
+      <div className="bg-white rounded-xl border border-gray-200 p-3 flex flex-wrap items-center gap-3">
+        <label htmlFor="opening-date" className="text-sm font-semibold text-gray-700">
+          Opening Date
+        </label>
+        <Input
+          id="opening-date"
+          type="date"
+          value={openingDate}
+          onChange={(e) => setOpeningDate(e.target.value)}
+          className="h-9 w-44"
+        />
+        <span className="text-xs text-gray-500">
+          {openingDate
+            ? `Rows you edit will be saved with ${fmtDate(openingDate)}. This date is shown on the first row of the ledger.`
+            : "Select the opening date, then click Edit / Add on an account. You can still change the date on each row."}
+        </span>
+      </div>
 
       {/* filters */}
       <div className="bg-white rounded-xl border border-gray-200 p-3 flex flex-wrap gap-2 items-center">
