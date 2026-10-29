@@ -23,6 +23,8 @@ const fmt = (n) => {
   const num = Number(n) || 0
   return num.toLocaleString("en-US", { minimumFractionDigits: num % 1 === 0 ? 0 : 2, maximumFractionDigits: 2 })
 }
+const fmtDate = (d) =>
+  new Date(d).toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric" }).replace(/\//g, ".")
 const rowKey = (r) => `${r.accountCategory}::${r.accountCode}`
 
 export default function OpeningTrialBalance() {
@@ -33,7 +35,7 @@ export default function OpeningTrialBalance() {
   const [category, setCategory] = useState("All")
   const [status, setStatus] = useState("All") // All | With | Without
   const [editKey, setEditKey] = useState(null)
-  const [draft, setDraft] = useState({ debit: "", credit: "" })
+  const [draft, setDraft] = useState({ debit: "", credit: "", date: "" })
   const [saving, setSaving] = useState(false)
   const [msg, setMsg] = useState(null)
 
@@ -73,18 +75,24 @@ export default function OpeningTrialBalance() {
 
   const startEdit = (r) => {
     setEditKey(rowKey(r))
-    setDraft({ debit: r.debit > 0 ? String(r.debit) : "", credit: r.credit > 0 ? String(r.credit) : "" })
+    // the date is always typed/picked by the user - nothing is filled in automatically
+    setDraft({
+      debit: r.debit > 0 ? String(r.debit) : "",
+      credit: r.credit > 0 ? String(r.credit) : "",
+      date: r.openingDate ? String(r.openingDate).split("T")[0] : "",
+    })
   }
   const cancelEdit = () => {
     setEditKey(null)
-    setDraft({ debit: "", credit: "" })
+    setDraft({ debit: "", credit: "", date: "" })
   }
 
   const saveRow = async (r) => {
     const dr = Number.parseFloat(draft.debit) || 0
     const cr = Number.parseFloat(draft.credit) || 0
-    if (dr < 0 || cr < 0) return flash(false, "Amount negative nahi ho sakta")
-    if (dr > 0 && cr > 0) return flash(false, "Debit ya Credit me se sirf ek me amount daalo")
+    if (dr < 0 || cr < 0) return flash(false, "Amount cannot be negative")
+    if (dr > 0 && cr > 0) return flash(false, "Enter an amount in either Debit or Credit, not both")
+    if ((dr > 0 || cr > 0) && !draft.date) return flash(false, "Please select the opening date")
     try {
       setSaving(true)
       await axios.post(`${API_BASE_URL}/opening-balances`, {
@@ -92,8 +100,9 @@ export default function OpeningTrialBalance() {
         accountCategory: r.accountCategory,
         debit: dr,
         credit: cr,
+        openingDate: draft.date || null,
       })
-      flash(true, dr === 0 && cr === 0 ? "Opening balance hata diya" : `${r.accountName}: opening balance save ho gaya`)
+      flash(true, dr === 0 && cr === 0 ? "Opening balance removed" : `${r.accountName}: opening balance saved`)
       cancelEdit()
       await load()
     } catch (e) {
@@ -104,12 +113,12 @@ export default function OpeningTrialBalance() {
   }
 
   const deleteRow = async (r) => {
-    if (!window.confirm(`${r.accountCode} - ${r.accountName}\nIska opening balance delete karna hai?`)) return
+    if (!window.confirm(`${r.accountCode} - ${r.accountName}\nDo you want to delete this opening balance?`)) return
     try {
       await axios.delete(`${API_BASE_URL}/opening-balances`, {
         params: { accountCode: r.accountCode, accountCategory: r.accountCategory },
       })
-      flash(true, "Opening balance delete ho gaya")
+      flash(true, "Opening balance deleted")
       if (editKey === rowKey(r)) cancelEdit()
       await load()
     } catch (e) {
@@ -124,7 +133,7 @@ export default function OpeningTrialBalance() {
       <div className="bg-blue-300 text-black rounded-xl px-6 py-4 text-center">
         <div className="text-2xl font-bold tracking-wide">Opening Trial Balance</div>
         <div className="text-sm opacity-80 mt-1">
-          Yahan daala hua Debit / Credit balance ledger ki pehli row (Opening Balance) me aayega
+          The Debit / Credit balance entered here appears as the first row (Opening Balance) of that account's ledger
         </div>
       </div>
 
@@ -136,7 +145,7 @@ export default function OpeningTrialBalance() {
       <div className="bg-white rounded-xl border border-gray-200 p-3 flex flex-wrap gap-2 items-center">
         <div className="relative flex-1 min-w-[200px]">
           <Search className="w-4 h-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-500" />
-          <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Account code ya naam search karo" className="pl-8 h-9" />
+          <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search by account code or name" className="pl-8 h-9" />
         </div>
         <select value={category} onChange={(e) => setCategory(e.target.value)} className="h-9 border border-gray-300 rounded-md px-2 text-sm bg-white">
           <option value="All">All Categories</option>
@@ -145,9 +154,9 @@ export default function OpeningTrialBalance() {
           ))}
         </select>
         <select value={status} onChange={(e) => setStatus(e.target.value)} className="h-9 border border-gray-300 rounded-md px-2 text-sm bg-white">
-          <option value="All">Sab accounts</option>
-          <option value="With">Opening wale</option>
-          <option value="Without">Opening baqi</option>
+          <option value="All">All accounts</option>
+          <option value="With">With opening balance</option>
+          <option value="Without">Without opening balance</option>
         </select>
         <Button variant="outline" onClick={load} disabled={loading} className="h-9 bg-transparent">
           <RefreshCw className={`w-4 h-4 mr-1 ${loading ? "animate-spin" : ""}`} />
@@ -158,12 +167,13 @@ export default function OpeningTrialBalance() {
       {/* table */}
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         <div className="overflow-auto max-h-[62vh]">
-          <table className="w-full text-sm min-w-[820px]">
+          <table className="w-full text-sm min-w-[960px]">
             <thead className="bg-gray-100 sticky top-0 z-10">
               <tr className="text-gray-700">
                 <th className="px-3 py-3 text-left w-28">Code</th>
                 <th className="px-3 py-3 text-left">Account</th>
                 <th className="px-3 py-3 text-left w-32">Category</th>
+                <th className="px-3 py-3 text-left w-40">Date</th>
                 <th className="px-3 py-3 text-right w-40">Debit</th>
                 <th className="px-3 py-3 text-right w-40">Credit</th>
                 <th className="px-3 py-3 text-center w-36">Actions</th>
@@ -172,8 +182,8 @@ export default function OpeningTrialBalance() {
             <tbody>
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-3 py-8 text-center text-gray-500">
-                    {loading ? "Loading..." : "Koi account nahi mila. Pehle Chart of Accounts me account banao."}
+                  <td colSpan={7} className="px-3 py-8 text-center text-gray-500">
+                    {loading ? "Loading..." : "No accounts found. Create an account in the Chart of Accounts first."}
                   </td>
                 </tr>
               )}
@@ -190,6 +200,21 @@ export default function OpeningTrialBalance() {
                       </span>
                     </td>
 
+                    <td className="px-3 py-2">
+                      {editing ? (
+                        <Input
+                          type="date"
+                          value={draft.date}
+                          onChange={(e) => setDraft({ ...draft, date: e.target.value })}
+                          className="h-8"
+                        />
+                      ) : r.openingDate ? (
+                        <span className="font-mono text-xs">{fmtDate(r.openingDate)}</span>
+                      ) : (
+                        <span className="text-gray-300">—</span>
+                      )}
+                    </td>
+
                     <td className="px-3 py-2 text-right">
                       {editing ? (
                         <Input
@@ -198,7 +223,7 @@ export default function OpeningTrialBalance() {
                           min="0"
                           autoFocus
                           value={draft.debit}
-                          onChange={(e) => setDraft({ debit: e.target.value, credit: e.target.value ? "" : draft.credit })}
+                          onChange={(e) => setDraft({ ...draft, debit: e.target.value, credit: e.target.value ? "" : draft.credit })}
                           onKeyDown={(e) => e.key === "Enter" && saveRow(r)}
                           className="h-8 text-right"
                           placeholder="0"
@@ -217,7 +242,7 @@ export default function OpeningTrialBalance() {
                           step="0.01"
                           min="0"
                           value={draft.credit}
-                          onChange={(e) => setDraft({ credit: e.target.value, debit: e.target.value ? "" : draft.debit })}
+                          onChange={(e) => setDraft({ ...draft, credit: e.target.value, debit: e.target.value ? "" : draft.debit })}
                           onKeyDown={(e) => e.key === "Enter" && saveRow(r)}
                           className="h-8 text-right"
                           placeholder="0"
@@ -241,13 +266,13 @@ export default function OpeningTrialBalance() {
                         </div>
                       ) : (
                         <div className="flex gap-2 justify-center">
-                          <button onClick={() => startEdit(r)} title={r.hasOpening ? "Edit" : "Opening balance add karo"} className="p-1.5 rounded border border-blue-600 text-blue-700 hover:bg-blue-50">
+                          <button onClick={() => startEdit(r)} title={r.hasOpening ? "Edit" : "Add opening balance"} className="p-1.5 rounded border border-blue-600 text-blue-700 hover:bg-blue-50">
                             {r.hasOpening ? <Pencil className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
                           </button>
                           <button
                             onClick={() => deleteRow(r)}
                             disabled={!r.hasOpening}
-                            title={r.hasOpening ? "Delete" : "Koi opening balance nahi"}
+                            title={r.hasOpening ? "Delete" : "No opening balance to delete"}
                             className="p-1.5 rounded border border-red-600 text-red-700 hover:bg-red-50 disabled:opacity-30 disabled:cursor-not-allowed"
                           >
                             <Trash2 className="w-4 h-4" />
@@ -265,7 +290,7 @@ export default function OpeningTrialBalance() {
         {/* totals */}
         <div className="border-t-2 border-blue-300 bg-blue-50 px-4 py-3 flex flex-wrap items-center gap-4 justify-between">
           <div className="text-sm text-gray-600">
-            {filtered.length} / {rows.length} accounts
+            Showing {filtered.length} of {rows.length} accounts
           </div>
           <div className="flex flex-wrap items-center gap-4">
             <div className="text-sm">
@@ -280,7 +305,7 @@ export default function OpeningTrialBalance() {
               </span>
             ) : totals.debit > 0 || totals.credit > 0 ? (
               <span className="flex items-center gap-1 text-sm bg-amber-100 text-amber-800 border border-amber-300 px-3 py-1 rounded-md">
-                <AlertTriangle className="w-4 h-4" /> Difference: {fmt(Math.abs(totals.difference))} ({totals.difference > 0 ? "Credit kam" : "Debit kam"})
+                <AlertTriangle className="w-4 h-4" /> Difference: {fmt(Math.abs(totals.difference))} ({totals.difference > 0 ? "Credit is short" : "Debit is short"})
               </span>
             ) : null}
           </div>

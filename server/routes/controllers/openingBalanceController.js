@@ -43,6 +43,7 @@ const list = async (req, res) => {
           accountCategory: category,
           debit: o ? o.debit : 0,
           credit: o ? o.credit : 0,
+          openingDate: o ? o.openingDate || null : null,
           hasOpening: !!o && (o.debit > 0 || o.credit > 0),
           updatedAt: o ? o.updatedAt : null,
         })
@@ -65,21 +66,22 @@ const list = async (req, res) => {
 
 // POST /api/opening-balances   { accountCode, accountCategory, debit, credit }
 // Debit OR credit (one of them). Both empty/0 = remove the opening balance.
+// The opening date is typed manually by the user (required when an amount is entered).
 const save = async (req, res) => {
   try {
-    const { accountCode, accountCategory } = req.body
+    const { accountCode, accountCategory, openingDate } = req.body
     const debit = round2(req.body.debit)
     const credit = round2(req.body.credit)
 
     const Model = CATEGORIES[accountCategory]
-    if (!Model || !accountCode) return res.status(400).json({ success: false, message: "Account select karo" })
-    if (debit < 0 || credit < 0) return res.status(400).json({ success: false, message: "Amount negative nahi ho sakta" })
+    if (!Model || !accountCode) return res.status(400).json({ success: false, message: "Please select an account" })
+    if (debit < 0 || credit < 0) return res.status(400).json({ success: false, message: "Amount cannot be negative" })
     if (debit > 0 && credit > 0) {
-      return res.status(400).json({ success: false, message: "Debit ya Credit me se sirf ek me amount daalo" })
+      return res.status(400).json({ success: false, message: "Enter an amount in either Debit or Credit, not both" })
     }
 
     const account = await Model.findOne({ code: accountCode, isActive: true }).lean()
-    if (!account) return res.status(404).json({ success: false, message: "Account chart of accounts me nahi mila" })
+    if (!account) return res.status(404).json({ success: false, message: "Account not found in the Chart of Accounts" })
 
     const existing = await OpeningBalance.findOne({ accountCode, accountCategory })
 
@@ -88,14 +90,20 @@ const save = async (req, res) => {
       return res.json({ success: true, removed: true })
     }
 
+    const when = openingDate ? new Date(openingDate) : null
+    if (!when || isNaN(when.getTime())) {
+      return res.status(400).json({ success: false, message: "Please enter the opening date" })
+    }
+
     let doc = existing
     if (doc) {
       doc.accountName = account.name
       doc.debit = debit
       doc.credit = credit
+      doc.openingDate = when
       await doc.save()
     } else {
-      doc = await OpeningBalance.create({ accountCode, accountName: account.name, accountCategory, debit, credit })
+      doc = await OpeningBalance.create({ accountCode, accountName: account.name, accountCategory, debit, credit, openingDate: when })
     }
     res.json({ success: true, data: doc })
   } catch (e) {
@@ -107,9 +115,9 @@ const save = async (req, res) => {
 const remove = async (req, res) => {
   try {
     const { accountCode, accountCategory } = req.query
-    if (!accountCode || !accountCategory) return res.status(400).json({ success: false, message: "accountCode aur accountCategory do" })
+    if (!accountCode || !accountCategory) return res.status(400).json({ success: false, message: "accountCode and accountCategory are required" })
     const r = await OpeningBalance.deleteOne({ accountCode, accountCategory })
-    if (!r.deletedCount) return res.status(404).json({ success: false, message: "Is account ka opening balance nahi mila" })
+    if (!r.deletedCount) return res.status(404).json({ success: false, message: "No opening balance found for this account" })
     res.json({ success: true })
   } catch (e) {
     res.status(500).json({ success: false, message: e.message })

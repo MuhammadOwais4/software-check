@@ -680,7 +680,7 @@ const getAccountLedger = async (req, res) => {
         ledgerEntries.unshift({
           id: `opening-${finalAccountCode}`,
           isOpening: true,
-          date: from,
+          date: opening.openingDate || from, // date typed manually in Opening Trial Balance
           voucherNo: "OPENING",
           voucherType: "Opening Balance",
           description: "Opening Balance",

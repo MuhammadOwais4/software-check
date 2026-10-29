@@ -12,6 +12,8 @@ const openingBalanceSchema = new mongoose.Schema(
       required: true,
       enum: ["Assets", "Liabilities", "Equity", "Revenue", "Expenses"],
     },
+    // Date of the opening balance - entered manually by the user (no automatic date)
+    openingDate: { type: Date },
     debit: { type: Number, default: 0, min: 0 },
     credit: { type: Number, default: 0, min: 0 },
   },
