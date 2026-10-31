@@ -173,9 +173,9 @@ export default function ReminderNotes() {
   const addNote = async (e) => {
     e.preventDefault();
     setErr("");
-    if (!text.trim()) return setErr("Note likho");
+    if (!text.trim()) return setErr("Please write a note");
     const d = new Date(when);
-    if (isNaN(d.getTime())) return setErr("Date aur time sahi daalo");
+    if (isNaN(d.getTime())) return setErr("Please enter a valid date and time");
     try {
       await axios.post(`${API_BASE_URL}/notes`, { text, remindAt: d.toISOString() });
       setText("");
@@ -187,7 +187,7 @@ export default function ReminderNotes() {
   };
 
   const removeNote = async (id) => {
-    if (!confirm("Ye note delete karna hai?")) return;
+    if (!confirm("Do you want to delete this note?")) return;
     try {
       await axios.delete(`${API_BASE_URL}/notes/${id}`);
     } catch (e) {
@@ -240,7 +240,7 @@ export default function ReminderNotes() {
               value={text}
               onChange={(e) => setText(e.target.value)}
               rows={3}
-              placeholder="Note likho... (reminder par ye message dikhega)"
+              placeholder="Write your note... (this message will be shown at the reminder time)"
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
             />
             <div className="flex gap-2">
@@ -261,14 +261,14 @@ export default function ReminderNotes() {
               </button>
               {notifPerm !== "granted" && typeof Notification !== "undefined" && (
                 <button type="button" onClick={askNotif} className="underline">
-                  Browser notification on karo
+                  Enable browser notifications
                 </button>
               )}
             </div>
           </form>
 
           <div className="p-4 space-y-2">
-            {pending.length === 0 && <p className="text-sm text-gray-500">Koi pending note nahi.</p>}
+            {pending.length === 0 && <p className="text-sm text-gray-500">No pending notes.</p>}
             {pending.map((n) => {
               const overdue = new Date(n.remindAt).getTime() <= Date.now() + skew.current;
               return (
@@ -334,13 +334,13 @@ export default function ReminderNotes() {
                       Done
                     </button>
                     <button onClick={() => popupAction(n, "snooze", { minutes: 5 })} className="px-3 py-2 rounded-lg border border-gray-300 hover:bg-gray-100 text-sm">
-                      5 min baad
+                      Snooze 5 min
                     </button>
                     <button onClick={() => popupAction(n, "snooze", { minutes: 30 })} className="px-3 py-2 rounded-lg border border-gray-300 hover:bg-gray-100 text-sm">
-                      30 min
+                      Snooze 30 min
                     </button>
                     <button onClick={() => popupAction(n, "ack")} className="px-3 py-2 rounded-lg border border-gray-300 hover:bg-gray-100 text-sm">
-                      Band karo
+                      Dismiss
                     </button>
                   </div>
                 </div>

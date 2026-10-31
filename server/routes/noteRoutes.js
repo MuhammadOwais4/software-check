@@ -22,9 +22,9 @@ router.get("/", async (req, res) => {
 router.post("/", async (req, res) => {
   try {
     const { text, remindAt } = req.body
-    if (!text || !String(text).trim()) return res.status(400).json({ success: false, message: "Note text likho" })
+    if (!text || !String(text).trim()) return res.status(400).json({ success: false, message: "Please write the note text" })
     const when = new Date(remindAt)
-    if (!remindAt || isNaN(when.getTime())) return res.status(400).json({ success: false, message: "Reminder date aur time sahi daalo" })
+    if (!remindAt || isNaN(when.getTime())) return res.status(400).json({ success: false, message: "Please enter a valid reminder date and time" })
     const note = await Note.create({ userId: req.user.userId, text: String(text).trim(), remindAt: when })
     res.status(201).json({ success: true, data: note })
   } catch (e) {
@@ -39,12 +39,12 @@ router.put("/:id", validId, async (req, res) => {
     if (!note) return res.status(404).json({ success: false, message: "Note not found" })
     const { text, remindAt } = req.body
     if (text !== undefined) {
-      if (!String(text).trim()) return res.status(400).json({ success: false, message: "Note text khali nahi ho sakta" })
+      if (!String(text).trim()) return res.status(400).json({ success: false, message: "Note text cannot be empty" })
       note.text = String(text).trim()
     }
     if (remindAt !== undefined) {
       const when = new Date(remindAt)
-      if (isNaN(when.getTime())) return res.status(400).json({ success: false, message: "Reminder date aur time sahi daalo" })
+      if (isNaN(when.getTime())) return res.status(400).json({ success: false, message: "Please enter a valid reminder date and time" })
       note.remindAt = when
       note.acknowledgedAt = null
     }
