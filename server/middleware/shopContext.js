@@ -10,7 +10,7 @@ const getContext = () => als.getStore()
 
 const PUBLIC = [
   { method: "POST", path: "/auth/login" },
-  { method: "POST", path: "/auth/signup" }, // signup does its own check (first user only / admin)
+  { method: "POST", path: "/auth/signup" }, 
   { method: "GET", path: "/health" },
 ]
 
@@ -48,6 +48,17 @@ function authAndShop(req, res, next) {
   } else {
     if (!payload.shopId) return res.status(403).json({ message: "Permission denied" })
     shopId = payload.shopId
+  }
+
+  // Admin/developer on "All Shops" can only VIEW. Saving/changing needs one shop selected,
+  // otherwise the record would belong to no shop. Say it clearly instead of a generic error.
+  const WRITE = ["POST", "PUT", "PATCH", "DELETE"]
+  const EXEMPT = ["/auth", "/shops", "/notes"] // not shop data
+  if (isAll(payload.role) && !shopId && WRITE.includes(req.method) && !EXEMPT.some((p) => url.startsWith(p))) {
+    return res.status(400).json({
+      success: false,
+      message: "Please select a shop from the dropdown at the top first. \"All Shops\" is view-only. (If no shop exists yet, create one in Users & Shops.)",
+    })
   }
 
   req.user = payload
