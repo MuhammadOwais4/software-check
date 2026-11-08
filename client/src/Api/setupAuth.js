@@ -18,6 +18,17 @@ export const authHeaders = () => {
   return h
 }
 
+// Adds auth headers to a request. If the caller already set x-shop-id for this one request
+// (e.g. JV fetching accounts of a different shop for one row), that value is kept.
+const applyAuth = (config) => {
+  const explicitShop = config.headers?.get ? config.headers.get("x-shop-id") : config.headers?.["x-shop-id"]
+  Object.entries(authHeaders()).forEach(([k, v]) => {
+    if (k === "x-shop-id" && explicitShop) return
+    config.headers.set ? config.headers.set(k, v) : (config.headers[k] = v)
+  })
+  return config
+}
+
 const forceLogout = () => {
   ;["accessToken", "userRole", "username", "shopId", "shopName", "selectedShopId"].forEach((k) =>
     localStorage.removeItem(k),
@@ -34,7 +45,7 @@ export function setupAuth() {
   axios.interceptors.request.use((config) => {
     const full = (config.baseURL || "") + (config.url || "")
     if (isApiUrl(config.url) || isApiUrl(full)) {
-      Object.entries(authHeaders()).forEach(([k, v]) => config.headers.set ? config.headers.set(k, v) : (config.headers[k] = v))
+      applyAuth(config)
     }
     return config
   })
@@ -42,7 +53,7 @@ export function setupAuth() {
   axios.create = (...args) => {
     const inst = origCreate(...args)
     inst.interceptors.request.use((config) => {
-      Object.entries(authHeaders()).forEach(([k, v]) => config.headers.set ? config.headers.set(k, v) : (config.headers[k] = v))
+      applyAuth(config)
       return config
     })
     inst.interceptors.response.use(

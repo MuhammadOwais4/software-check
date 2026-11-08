@@ -38,6 +38,8 @@ export default function useCurrentShop() {
   return {
     shopId,
     shop,
+    shops, // every shop list (admin: all, shop user: own)
+    isAdmin: !!isAdmin,
     shopName: shop?.name || (shopId ? user?.shopName || "" : isAdmin ? "All Shops" : ""),
     shopAddress: shop?.address || "",
   }

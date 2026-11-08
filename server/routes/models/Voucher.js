@@ -37,6 +37,8 @@ const voucherEntrySchema = new mongoose.Schema({
     default: 0,
   },
   // Journal Voucher table extra columns
+  // Shop of this row (JV can mix shops). Header voucher shopId stays the shop it was saved from.
+  shopId: { type: mongoose.Schema.Types.ObjectId, ref: "Shop" },
   billNo: { type: String, trim: true },
   billReference: { type: String, trim: true },
   chequeNo: { type: String, trim: true },
