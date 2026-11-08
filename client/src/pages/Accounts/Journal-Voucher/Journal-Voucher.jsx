@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useRef } from "react"
 import { createPortal } from "react-dom"
+import axios from "axios"
+import { API_BASE_URL } from "@/config"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -20,8 +22,9 @@ import { Trash2, Edit3, Plus, X, Check, Search, AlertTriangle } from "lucide-rea
 import ApiHandler from "@/Api/apihandle"
 import useCurrentShop from "@/hooks/useCurrentShop"
 
-const newRow = () => ({
+const newRow = (shopId = "") => ({
   id: `row-${Date.now()}-${Math.floor(Math.random() * 1000000)}`,
+  shopId, // shop of this row (one JV can have rows of different shops)
   accountCode: "",
   accountName: "",
   narration: "", // separate narration for every row
@@ -30,7 +33,7 @@ const newRow = () => ({
   billNo: "", // bill number of this row
 })
 
-const initialRows = () => [newRow(), newRow()]
+const initialRows = (shopId = "") => [newRow(shopId), newRow(shopId)]
 
 const generateUniqueVoucherNo = () => {
   const timestamp = Date.now()
@@ -165,11 +168,12 @@ function AccountCodeCell({ value, accounts, onSelect, focusSignal = 0 }) {
 }
 
 export default function JournalVoucher() {
-  const { shopName, shopAddress } = useCurrentShop() // shop selected at the top (or the user's own shop)
+  // shop selected at the top (or the user's own shop) = default shop for new rows
+  const { shopName, shopAddress, shopId: headerShopId, shops, isAdmin } = useCurrentShop()
   const [voucherNo, setVoucherNo] = useState("")
   const [voucherDate, setVoucherDate] = useState("")
-  const [rows, setRows] = useState(initialRows())
-  const [accountOptions, setAccountOptions] = useState([])
+  const [rows, setRows] = useState(() => initialRows(headerShopId || ""))
+  const [accountsByShop, setAccountsByShop] = useState({}) // { [shopId]: accounts of that shop }
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [saveSuccess, setSaveSuccess] = useState(false)
@@ -190,7 +194,7 @@ export default function JournalVoucher() {
   const diffCents = toCents(totalDebit) - toCents(totalCredit)
   const isBalanced = diffCents === 0 && toCents(totalDebit) > 0
   const usedRows = rows.filter((r) => r.accountCode || r.debit || r.credit)
-  const allHaveAccounts = usedRows.every((r) => r.accountCode && r.accountName)
+  const allHaveAccounts = usedRows.every((r) => r.accountCode && r.accountName && r.shopId)
   // Save / Print only open when Debit = Credit (and every amount row has an account)
   const canSubmit = isBalanced && allHaveAccounts
 
@@ -218,42 +222,73 @@ export default function JournalVoucher() {
   useEffect(() => {
     setVoucherNo(generateUniqueVoucherNo())
     setVoucherDate(new Date().toISOString().split("T")[0])
-    loadAllAccounts()
     loadAllVouchers()
   }, [])
 
+  // Shop at the top arrives late for shop users (user loads after mount) -> fill rows that have no shop yet
+  useEffect(() => {
+    if (!headerShopId) return
+    setRows((prev) => prev.map((r) => (r.shopId ? r : { ...r, shopId: headerShopId })))
+  }, [headerShopId])
+
+  // Accounts of ONE shop. x-shop-id is set for this request only, the header shop is not changed.
+  const fetchAccountsForShop = async (sid) => {
+    const headers = sid ? { "x-shop-id": sid } : {}
+    const load = (path) =>
+      axios
+        .get(`${API_BASE_URL}${path}`, { headers })
+        .then((r) => r.data?.data || [])
+        .catch(() => [])
+    const [assets, equity, expenses, liabilities, revenue] = await Promise.all([
+      load("/chart-of-accounts/assets"),
+      load("/chart-of-accounts/equity"),
+      load("/chart-of-accounts/expenses"),
+      load("/chart-of-accounts/liabilities"),
+      load("/chart-of-accounts/revenue"),
+    ])
+
+    const mapAcc = (list, category) =>
+      list.map((account) => ({
+        value: `${account.code} - ${account.name}`,
+        category,
+        ...account,
+      }))
+
+    const all = [
+      ...mapAcc(assets, "Assets"),
+      ...mapAcc(equity, "Equity"),
+      ...mapAcc(expenses, "Expenses"),
+      ...mapAcc(liabilities, "Liabilities"),
+      ...mapAcc(revenue, "Revenue"),
+    ]
+    all.sort((a, b) => String(a.code).localeCompare(String(b.code)))
+    return all
+  }
+
+  // Shops used in the rows (a row can belong to any shop)
+  const usedShopKey = [...new Set(rows.map((r) => r.shopId).filter(Boolean))].join(",")
+  const requestedShops = useRef(new Set())
+
+  // Load the chart of accounts of every row-shop once
+  useEffect(() => {
+    usedShopKey
+      .split(",")
+      .filter(Boolean)
+      .forEach((sid) => {
+        if (requestedShops.current.has(sid)) return
+        requestedShops.current.add(sid)
+        fetchAccountsForShop(sid).then((list) => setAccountsByShop((prev) => ({ ...prev, [sid]: list })))
+      })
+  }, [usedShopKey])
+
+  // "Refresh Chart of Accounts" button: reload every shop used in the rows
   const loadAllAccounts = async () => {
-    try {
-      setLoading(true)
-      const [assetsRes, equityRes, expensesRes, liabilitiesRes, revenueRes] = await Promise.all([
-        ApiHandler.getAssets().catch(() => ({ data: [] })),
-        ApiHandler.getEquity().catch(() => ({ data: [] })),
-        ApiHandler.getChartExpenses().catch(() => ({ data: [] })),
-        ApiHandler.getLiabilities().catch(() => ({ data: [] })),
-        ApiHandler.getRevenue().catch(() => ({ data: [] })),
-      ])
-
-      const mapAcc = (list, category) =>
-        (list.data || []).map((account) => ({
-          value: `${account.code} - ${account.name}`,
-          category,
-          ...account,
-        }))
-
-      const all = [
-        ...mapAcc(assetsRes, "Assets"),
-        ...mapAcc(equityRes, "Equity"),
-        ...mapAcc(expensesRes, "Expenses"),
-        ...mapAcc(liabilitiesRes, "Liabilities"),
-        ...mapAcc(revenueRes, "Revenue"),
-      ]
-      all.sort((a, b) => String(a.code).localeCompare(String(b.code)))
-      setAccountOptions(all)
-    } catch (error) {
-      console.error("Error loading accounts:", error)
-    } finally {
-      setLoading(false)
-    }
+    const shopIds = [...new Set(rows.map((r) => r.shopId).filter(Boolean))]
+    if (!shopIds.length) return
+    setLoading(true)
+    const results = await Promise.all(shopIds.map((sid) => fetchAccountsForShop(sid).then((list) => [sid, list])))
+    setAccountsByShop((prev) => ({ ...prev, ...Object.fromEntries(results) }))
+    setLoading(false)
   }
 
   const loadAllVouchers = async () => {
@@ -274,6 +309,9 @@ export default function JournalVoucher() {
   const updateRow = (id, patch) => setRows((prev) => prev.map((r) => (r.id === id ? { ...r, ...patch } : r)))
 
   const selectAccount = (id, acc) => updateRow(id, { accountCode: String(acc.code), accountName: acc.name })
+
+  // Changing a row's shop clears its account (an account belongs to one shop)
+  const changeRowShop = (id, sid) => updateRow(id, { shopId: sid, accountCode: "", accountName: "" })
 
   // Typing in one side clears the other side of the same row. Amounts are always typed by the user.
   const setAmount = (id, side, value) => {
@@ -299,7 +337,7 @@ export default function JournalVoucher() {
     if (emptyIdx !== -1) {
       targetId = rows[emptyIdx].id
     } else {
-      const blank = newRow()
+      const blank = newRow(rows[rows.length - 1]?.shopId || headerShopId || "")
       targetId = blank.id
       setRows((prev) => [...prev, blank])
     }
@@ -312,7 +350,7 @@ export default function JournalVoucher() {
   }
 
   const resetForm = () => {
-    setRows(initialRows())
+    setRows(initialRows(headerShopId || ""))
     setVoucherNo(generateUniqueVoucherNo())
     setVoucherDate(new Date().toISOString().split("T")[0])
     setIsEditMode(false)
@@ -330,6 +368,7 @@ export default function JournalVoucher() {
       const [code, ...rest] = (e.account || "").split(" - ")
       return {
         id: e.id || e._id || `loaded-${Date.now()}-${i}-${Math.floor(Math.random() * 1000000)}`,
+        shopId: e.shopId || voucher.shopId || headerShopId || "",
         accountCode: code || "",
         accountName: rest.join(" - "),
         narration: e.narration || e.description || "",
@@ -338,7 +377,7 @@ export default function JournalVoucher() {
         billNo: e.billNo || voucher.billNo || "",
       }
     })
-    setRows(loaded.length >= 2 ? loaded : [...loaded, ...initialRows().slice(loaded.length)])
+    setRows(loaded.length >= 2 ? loaded : [...loaded, ...initialRows(headerShopId || "").slice(loaded.length)])
     setShowVoucherList(false)
   }
 
@@ -377,6 +416,7 @@ export default function JournalVoucher() {
     for (let i = 0; i < used.length; i++) {
       const r = used[i]
       const n = i + 1
+      if (!r.shopId) return `Row ${n}: Select a shop.`
       if (!r.accountCode || !r.accountName) return `Row ${n}: Select an account.`
       const hasDr = toCents(r.debit) > 0
       const hasCr = toCents(r.credit) > 0
@@ -405,6 +445,7 @@ export default function JournalVoucher() {
         serialNo: i + 1,
         pairId: i + 1, // backend schema requires a numeric pairId on every entry
         account: `${r.accountCode} - ${r.accountName}`,
+        shopId: r.shopId,
         debitAmount: isDebit ? Number.parseFloat(r.debit) : 0,
         creditAmount: isDebit ? 0 : Number.parseFloat(r.credit),
         entryType: isDebit ? "debit" : "credit",
@@ -618,7 +659,7 @@ export default function JournalVoucher() {
                 >
                   {loading ? "Loading..." : "Refresh Chart of Accounts"}
                 </Button>
-                <div className="text-sm text-gray-600">Total Accounts Available: {accountOptions.length}</div>
+                <div className="text-sm text-gray-600">Total Accounts Available: {(accountsByShop[headerShopId] || []).length}</div>
               </div>
 
               {/* ---------- ENTRY TABLE ---------- */}
@@ -640,18 +681,33 @@ export default function JournalVoucher() {
                     {rows.map((r) => (
                       <tr key={r.id} className="border-t border-gray-200 align-top">
                         <td className="p-2 border-r border-gray-200">
-                          <Input
-                            value={shopName}
-                            readOnly
-                            tabIndex={-1}
-                            title="Shop selected at the top"
-                            className="h-9 text-sm bg-blue-50 border-blue-200 font-medium text-blue-900"
-                          />
+                          {isAdmin ? (
+                            <select
+                              value={r.shopId || ""}
+                              onChange={(e) => changeRowShop(r.id, e.target.value)}
+                              className="h-9 w-full rounded-md border border-blue-200 bg-blue-50 px-2 text-sm font-medium text-blue-900"
+                            >
+                              <option value="">Select shop</option>
+                              {shops.map((sh) => (
+                                <option key={sh._id} value={sh._id}>
+                                  {sh.name}
+                                </option>
+                              ))}
+                            </select>
+                          ) : (
+                            <Input
+                              value={shopName}
+                              readOnly
+                              tabIndex={-1}
+                              title="Your shop"
+                              className="h-9 text-sm bg-blue-50 border-blue-200 font-medium text-blue-900"
+                            />
+                          )}
                         </td>
                         <td className="p-2 border-r border-gray-200">
                           <AccountCodeCell
                             value={r.accountCode}
-                            accounts={accountOptions}
+                            accounts={accountsByShop[r.shopId] || []}
                             onSelect={(acc) => selectAccount(r.id, acc)}
                             focusSignal={focusReq.id === r.id ? focusReq.n : 0}
                           />
