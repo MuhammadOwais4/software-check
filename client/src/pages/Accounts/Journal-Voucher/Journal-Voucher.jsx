@@ -169,7 +169,7 @@ function AccountCodeCell({ value, accounts, onSelect, focusSignal = 0 }) {
 
 export default function JournalVoucher() {
   // shop selected at the top (or the user's own shop) = default shop for new rows
-  const { shopName, shopAddress, shopId: headerShopId, shops, isAdmin } = useCurrentShop()
+  const { shopName, shopAddress, shopId: headerShopId, shops } = useCurrentShop()
   const [voucherNo, setVoucherNo] = useState("")
   const [voucherDate, setVoucherDate] = useState("")
   const [rows, setRows] = useState(() => initialRows(headerShopId || ""))
@@ -681,28 +681,18 @@ export default function JournalVoucher() {
                     {rows.map((r) => (
                       <tr key={r.id} className="border-t border-gray-200 align-top">
                         <td className="p-2 border-r border-gray-200">
-                          {isAdmin ? (
-                            <select
-                              value={r.shopId || ""}
-                              onChange={(e) => changeRowShop(r.id, e.target.value)}
-                              className="h-9 w-full rounded-md border border-blue-200 bg-blue-50 px-2 text-sm font-medium text-blue-900"
-                            >
-                              <option value="">Select shop</option>
-                              {shops.map((sh) => (
-                                <option key={sh._id} value={sh._id}>
-                                  {sh.name}
-                                </option>
-                              ))}
-                            </select>
-                          ) : (
-                            <Input
-                              value={shopName}
-                              readOnly
-                              tabIndex={-1}
-                              title="Your shop"
-                              className="h-9 text-sm bg-blue-50 border-blue-200 font-medium text-blue-900"
-                            />
-                          )}
+                          <select
+                            value={r.shopId || ""}
+                            onChange={(e) => changeRowShop(r.id, e.target.value)}
+                            className="h-9 w-full rounded-md border border-blue-200 bg-blue-50 px-2 text-sm font-medium text-blue-900"
+                          >
+                            <option value="">Select shop</option>
+                            {shops.map((sh) => (
+                              <option key={sh._id} value={sh._id}>
+                                {sh.name}
+                              </option>
+                            ))}
+                          </select>
                         </td>
                         <td className="p-2 border-r border-gray-200">
                           <AccountCodeCell
