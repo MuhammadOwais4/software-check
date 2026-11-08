@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Trash2, Edit3, Plus, X, Check, Search, AlertTriangle } from "lucide-react"
 import ApiHandler from "@/Api/apihandle"
+import useCurrentShop from "@/hooks/useCurrentShop"
 
 const newRow = () => ({
   id: `row-${Date.now()}-${Math.floor(Math.random() * 1000000)}`,
@@ -164,6 +165,7 @@ function AccountCodeCell({ value, accounts, onSelect, focusSignal = 0 }) {
 }
 
 export default function JournalVoucher() {
+  const { shopName, shopAddress } = useCurrentShop() // shop selected at the top (or the user's own shop)
   const [voucherNo, setVoucherNo] = useState("")
   const [voucherDate, setVoucherDate] = useState("")
   const [rows, setRows] = useState(initialRows())
@@ -509,7 +511,7 @@ export default function JournalVoucher() {
                   )}
                 </div>
               </div>
-              <div className="text-base font-semibold opacity-90">demo</div>
+              <div className="text-base font-semibold opacity-90">{shopName}</div>
               <CardTitle className="text-2xl font-bold tracking-wide">
                 Journal Voucher GL {isEditMode && <span className="text-sm">(Editing)</span>}
               </CardTitle>
@@ -621,9 +623,10 @@ export default function JournalVoucher() {
 
               {/* ---------- ENTRY TABLE ---------- */}
               <div className="border border-gray-300 rounded-md overflow-x-auto">
-                <table className="w-full min-w-[900px] text-sm">
+                <table className="w-full min-w-[1000px] text-sm">
                   <thead className="bg-gray-50">
                     <tr className="text-center text-gray-700">
+                      <th className="px-2 py-3 border-r border-gray-200 w-36">Shop</th>
                       <th className="px-2 py-3 border-r border-gray-200 w-44">AccountCode</th>
                       <th className="px-2 py-3 border-r border-gray-200 w-48">Account</th>
                       <th className="px-2 py-3 border-r border-gray-200 w-56">Narration</th>
@@ -636,6 +639,15 @@ export default function JournalVoucher() {
                   <tbody>
                     {rows.map((r) => (
                       <tr key={r.id} className="border-t border-gray-200 align-top">
+                        <td className="p-2 border-r border-gray-200">
+                          <Input
+                            value={shopName}
+                            readOnly
+                            tabIndex={-1}
+                            title="Shop selected at the top"
+                            className="h-9 text-sm bg-blue-50 border-blue-200 font-medium text-blue-900"
+                          />
+                        </td>
                         <td className="p-2 border-r border-gray-200">
                           <AccountCodeCell
                             value={r.accountCode}
@@ -787,7 +799,8 @@ export default function JournalVoucher() {
         <div className="print-area px-4 py-4">
           <div className="mx-auto">
             <header className="text-center mb-3">
-              <h1 className="text-lg font-bold text-black">demo</h1>
+              <h1 className="text-lg font-bold text-black">{shopName}</h1>
+              {shopAddress && <p className="text-[10px] text-gray-600">{shopAddress}</p>}
               <p className="text-xs text-gray-700">Journal Voucher (GL)</p>
             </header>
 

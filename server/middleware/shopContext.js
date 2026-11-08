@@ -10,7 +10,7 @@ const getContext = () => als.getStore()
 
 const PUBLIC = [
   { method: "POST", path: "/auth/login" },
-  { method: "POST", path: "/auth/signup" }, 
+  { method: "POST", path: "/auth/signup" }, // signup does its own check (first user only / admin)
   { method: "GET", path: "/health" },
 ]
 
