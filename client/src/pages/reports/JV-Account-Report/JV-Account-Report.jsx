@@ -6,7 +6,10 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Search, RefreshCw, Printer, ExternalLink } from "lucide-react"
+import axios from "axios"
 import ApiHandler from "@/Api/apihandle"
+import { API_BASE_URL } from "@/config"
+import useCurrentShop from "@/hooks/useCurrentShop"
 
 /* ---------------------------------------------------------------------------
    JV Account Report
@@ -74,33 +77,56 @@ const formatAmount = (value) => {
 }
 
 export default function JVAccountReport({ onOpenJV }) {
+  const { shops, shopId: headerShopId, isAdmin } = useCurrentShop()
+
   const [vouchers, setVouchers] = useState([])
-  const [accounts, setAccounts] = useState({ receivable: [], liability: [], capital: [] })
+  // Chart of accounts is PER SHOP:  { [shopId]: { receivable: [], liability: [], capital: [] } }
+  const [chart, setChart] = useState({})
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
+  const [warning, setWarning] = useState("")
 
   const [activeSection, setActiveSection] = useState("receivable")
   const [fromDate, setFromDate] = useState("")
   const [toDate, setToDate] = useState("")
   const [search, setSearch] = useState("")
   const [accountFilter, setAccountFilter] = useState("all")
+  const [shopFilter, setShopFilter] = useState("all")
+
+  const multiShop = shops.length > 1
+  const shopNameOf = (id) => shops.find((x) => String(x._id) === String(id))?.name || ""
+
+  // Accounts of ONE shop. The x-shop-id header is sent for this request only, so this also works
+  // when the admin is on "All Shops" (the API gives an empty list without a shop).
+  const loadShopAccounts = async (sid) => {
+    const headers = sid ? { "x-shop-id": sid } : {}
+    let failed = false
+    const load = (path) =>
+      axios
+        .get(`${API_BASE_URL}${path}`, { headers })
+        .then((r) => r.data?.data || [])
+        .catch(() => {
+          failed = true
+          return []
+        })
+    const [assets, liabilities, equity] = await Promise.all([
+      load("/chart-of-accounts/assets"),
+      load("/chart-of-accounts/liabilities"),
+      load("/chart-of-accounts/equity"),
+    ])
+    return {
+      failed,
+      receivable: assets.filter((a) => String(a.type).toUpperCase() === "RECEIVABLES"),
+      liability: liabilities,
+      capital: equity.filter((a) => String(a.type).toLowerCase() === "capital"),
+    }
+  }
 
   const loadData = async () => {
     try {
       setLoading(true)
       setError("")
-
-      const [assetsRes, liabilitiesRes, equityRes] = await Promise.all([
-        ApiHandler.getAssets().catch(() => ({ data: [] })),
-        ApiHandler.getLiabilities().catch(() => ({ data: [] })),
-        ApiHandler.getEquity().catch(() => ({ data: [] })),
-      ])
-
-      setAccounts({
-        receivable: (assetsRes.data || []).filter((a) => String(a.type).toUpperCase() === "RECEIVABLES"),
-        liability: liabilitiesRes.data || [],
-        capital: (equityRes.data || []).filter((a) => String(a.type).toLowerCase() === "capital"),
-      })
+      setWarning("")
 
       // The vouchers API is paginated -> read every page of JV vouchers
       const all = []
@@ -113,6 +139,31 @@ export default function JVAccountReport({ onOpenJV }) {
         page += 1
       } while (page <= pages && page <= 50)
       setVouchers(all)
+
+      // Which shops' charts are needed? (every shop used by a JV line, plus the shop selected on top)
+      const ids = new Set()
+      if (headerShopId) ids.add(String(headerShopId))
+      if (isAdmin || !headerShopId) {
+        all.forEach((v) => {
+          if (v.shopId) ids.add(String(v.shopId))
+          ;(v.entries || []).forEach((e) => e.shopId && ids.add(String(e.shopId)))
+        })
+      }
+      const idList = ids.size ? [...ids] : [""]
+      const loaded = await Promise.all(idList.map((sid) => loadShopAccounts(sid)))
+
+      const next = {}
+      idList.forEach((sid, i) => (next[sid] = loaded[i]))
+      setChart(next)
+
+      const total = loaded.reduce((n, c) => n + c.receivable.length + c.liability.length + c.capital.length, 0)
+      if (loaded.some((c) => c.failed)) {
+        setWarning("Kuch accounts load nahi ho sakay (login/internet check karke Refresh karo).")
+      } else if (total === 0) {
+        setWarning(
+          "Is shop ke Chart of Accounts mein Receivable / Liability / Capital type ka koi account nahi mila. Upar se shop select karo ya Chart of Accounts mein account ki type check karo.",
+        )
+      }
     } catch (err) {
       console.error("JV report load error:", err)
       setError(err.message || "Failed to load report")
@@ -124,14 +175,28 @@ export default function JVAccountReport({ onOpenJV }) {
 
   useEffect(() => {
     loadData()
-  }, [])
+  }, [headerShopId, isAdmin])
 
-  // account code -> section
-  const sectionByCode = useMemo(() => {
+  // "shopId|code" -> section   (account codes can repeat in different shops)
+  const sectionByKey = useMemo(() => {
     const map = new Map()
-    SECTIONS.forEach((s) => (accounts[s.key] || []).forEach((a) => map.set(String(a.code).trim(), s.key)))
+    Object.entries(chart).forEach(([sid, c]) => {
+      SECTIONS.forEach((s) => (c[s.key] || []).forEach((a) => map.set(`${sid}|${String(a.code).trim()}`, s.key)))
+    })
     return map
-  }, [accounts])
+  }, [chart])
+
+  // accounts of the active section (for the Account dropdown)
+  const accountChoices = (sectionKey) => {
+    const out = []
+    Object.entries(chart).forEach(([sid, c]) =>
+      (c[sectionKey] || []).forEach((a) => {
+        if (shopFilter !== "all" && sid !== shopFilter) return
+        out.push({ key: `${sid}|${String(a.code).trim()}`, sid, code: String(a.code), name: a.name })
+      }),
+    )
+    return out.sort((x, y) => x.code.localeCompare(y.code))
+  }
 
   // one row per JV line that hits one of the three account groups
   const allRows = useMemo(() => {
@@ -139,10 +204,14 @@ export default function JVAccountReport({ onOpenJV }) {
     vouchers.forEach((v) => {
       ;(v.entries || []).forEach((e, idx) => {
         const code = codeOf(e.account)
-        const section = sectionByCode.get(code)
+        const sid = String(e.shopId || v.shopId || headerShopId || "")
+        const section = sectionByKey.get(`${sid}|${code}`) || (!sid ? sectionByKey.get(`|${code}`) : undefined)
         if (!section) return
         out.push({
           key: `${v._id}-${e._id || idx}`,
+          shopId: sid,
+          shopName: shopNameOf(sid),
+          accountKey: `${sid}|${code}`,
           voucherId: v._id,
           voucherNo: v.voucherNo,
           date: v.voucherDate,
@@ -158,7 +227,7 @@ export default function JVAccountReport({ onOpenJV }) {
     })
     out.sort((a, b) => (a.day < b.day ? 1 : a.day > b.day ? -1 : String(b.voucherNo).localeCompare(String(a.voucherNo))))
     return out
-  }, [vouchers, sectionByCode])
+  }, [vouchers, sectionByKey, shops, headerShopId])
 
   // date + text filters (shared by the section cards and the table)
   const baseRows = useMemo(() => {
@@ -166,10 +235,11 @@ export default function JVAccountReport({ onOpenJV }) {
     return allRows.filter((r) => {
       if (fromDate && r.day < fromDate) return false
       if (toDate && r.day > toDate) return false
+      if (shopFilter !== "all" && r.shopId !== shopFilter) return false
       if (q && !`${r.voucherNo} ${r.code} ${r.name} ${r.narration}`.toLowerCase().includes(q)) return false
       return true
     })
-  }, [allRows, fromDate, toDate, search])
+  }, [allRows, fromDate, toDate, search, shopFilter])
 
   const totalsBySection = useMemo(() => {
     const t = {}
@@ -183,10 +253,10 @@ export default function JVAccountReport({ onOpenJV }) {
   }, [baseRows])
 
   const section = SECTIONS.find((s) => s.key === activeSection) || SECTIONS[0]
-  const sectionAccounts = accounts[section.key] || []
+  const sectionAccounts = accountChoices(section.key)
 
   const rows = useMemo(
-    () => baseRows.filter((r) => r.section === section.key && (accountFilter === "all" || r.code === accountFilter)),
+    () => baseRows.filter((r) => r.section === section.key && (accountFilter === "all" || r.accountKey === accountFilter)),
     [baseRows, section.key, accountFilter],
   )
 
@@ -254,8 +324,14 @@ export default function JVAccountReport({ onOpenJV }) {
             </div>
           )}
 
+          {warning && (
+            <div className="mb-3 bg-amber-100 text-amber-800 border border-amber-300 rounded-md px-3 py-2 text-sm jv-no-print">
+              {warning}
+            </div>
+          )}
+
           {/* ---------- Filters ---------- */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-4 jv-no-print">
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-3 mb-4 jv-no-print">
             <div className="space-y-1">
               <Label className="text-xs font-semibold text-gray-700">From Date</Label>
               <Input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="h-9" />
@@ -264,7 +340,27 @@ export default function JVAccountReport({ onOpenJV }) {
               <Label className="text-xs font-semibold text-gray-700">To Date</Label>
               <Input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="h-9" />
             </div>
-            <div className="space-y-1 md:col-span-2">
+            {multiShop && (
+              <div className="space-y-1">
+                <Label className="text-xs font-semibold text-gray-700">Shop</Label>
+                <select
+                  value={shopFilter}
+                  onChange={(e) => {
+                    setShopFilter(e.target.value)
+                    setAccountFilter("all")
+                  }}
+                  className="h-9 w-full border border-gray-300 rounded-md px-2 text-sm bg-white"
+                >
+                  <option value="all">All Shops</option>
+                  {shops.map((x) => (
+                    <option key={x._id} value={String(x._id)}>
+                      {x.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+            <div className={`space-y-1 ${multiShop ? "md:col-span-2" : "md:col-span-3"}`}>
               <Label className="text-xs font-semibold text-gray-700">Search (JV No / Account / Narration)</Label>
               <div className="relative">
                 <Input
@@ -323,14 +419,12 @@ export default function JVAccountReport({ onOpenJV }) {
                 className="h-9 border border-gray-300 rounded-md px-2 text-sm bg-white max-w-xs"
               >
                 <option value="all">All accounts ({sectionAccounts.length})</option>
-                {sectionAccounts
-                  .slice()
-                  .sort((a, b) => String(a.code).localeCompare(String(b.code)))
-                  .map((a) => (
-                    <option key={a.code} value={String(a.code)}>
-                      {a.code} - {a.name}
-                    </option>
-                  ))}
+                {sectionAccounts.map((a) => (
+                  <option key={a.key} value={a.key}>
+                    {multiShop ? `${shopNameOf(a.sid) || "Shop"} | ` : ""}
+                    {a.code} - {a.name}
+                  </option>
+                ))}
               </select>
             </div>
           </div>
@@ -343,6 +437,7 @@ export default function JVAccountReport({ onOpenJV }) {
                   <th className="px-2 py-2 border-r border-gray-200 w-12 text-center">S.No</th>
                   <th className="px-2 py-2 border-r border-gray-200 text-left w-44">JV No</th>
                   <th className="px-2 py-2 border-r border-gray-200 text-left w-28">JV Date</th>
+                  {multiShop && <th className="px-2 py-2 border-r border-gray-200 text-left w-32">Shop</th>}
                   <th className="px-2 py-2 border-r border-gray-200 text-left w-24">Code</th>
                   <th className="px-2 py-2 border-r border-gray-200 text-left">Account</th>
                   <th className="px-2 py-2 border-r border-gray-200 text-left">Narration</th>
@@ -353,7 +448,7 @@ export default function JVAccountReport({ onOpenJV }) {
               <tbody>
                 {rows.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="px-3 py-8 text-center text-gray-500">
+                    <td colSpan={multiShop ? 9 : 8} className="px-3 py-8 text-center text-gray-500">
                       {loading ? "Loading..." : "No JV entries found for these filters"}
                     </td>
                   </tr>
@@ -373,6 +468,7 @@ export default function JVAccountReport({ onOpenJV }) {
                         </button>
                       </td>
                       <td className="px-2 py-1.5 whitespace-nowrap">{formatDate(r.date)}</td>
+                      {multiShop && <td className="px-2 py-1.5">{r.shopName || "-"}</td>}
                       <td className="px-2 py-1.5 font-mono">{r.code}</td>
                       <td className="px-2 py-1.5 font-medium text-gray-800">{r.name}</td>
                       <td className="px-2 py-1.5 text-gray-600">{r.narration || "-"}</td>
@@ -385,7 +481,7 @@ export default function JVAccountReport({ onOpenJV }) {
               {rows.length > 0 && (
                 <tfoot>
                   <tr className="border-t-2 border-blue-300 bg-blue-100 font-bold">
-                    <td colSpan={6} className="px-2 py-2 text-right">
+                    <td colSpan={multiShop ? 7 : 6} className="px-2 py-2 text-right">
                       Total ({rows.length} entries) &nbsp;|&nbsp; {section.netLabel}:{" "}
                       {formatAmount(section.net(totalDebit, totalCredit))}
                     </td>
