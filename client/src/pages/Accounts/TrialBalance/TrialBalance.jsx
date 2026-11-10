@@ -42,7 +42,19 @@ export default function TrialBalanceIntegrated() {
   const [error, setError] = useState(null)
 
   // ✅ FIX 1: Ref to prevent double API calls
-  const isCalculating = useRef(false)
+  // Every Calculate click starts a fresh run; an older run that is still going is ignored.
+  const runIdRef = useRef(0)
+
+  // fetch with no cache + timeout, so a hung request can never block Calculate
+  const getJSON = async (url, ms = 60000) => {
+    const ctrl = new AbortController()
+    const t = setTimeout(() => ctrl.abort(), ms)
+    try {
+      return await fetch(url, { cache: "no-store", signal: ctrl.signal })
+    } finally {
+      clearTimeout(t)
+    }
+  }
 
   useEffect(() => {
     const style = document.createElement('style')
@@ -82,13 +94,8 @@ export default function TrialBalanceIntegrated() {
   const calculateTrialBalance = async () => {
     if (!startDate || !endDate) return
 
-    // ✅ FIX 3: Prevent concurrent calls
-    if (isCalculating.current) {
-      console.log("⚠️ Already calculating, skipping duplicate call...")
-      return
-    }
-
-    isCalculating.current = true
+    const myRun = ++runIdRef.current
+    const stale = () => myRun !== runIdRef.current
     setLoading(true)
     setError(null)
 
@@ -96,7 +103,7 @@ export default function TrialBalanceIntegrated() {
       console.log("📊 Fetching all accounts from ledger API...")
 
       // Fetch all accounts
-      const accountsResponse = await fetch(`${API_BASE_URL}/ledgers/accounts`)
+      const accountsResponse = await getJSON(`${API_BASE_URL}/ledgers/accounts`)
 
       // ✅ Check HTTP status first — don't blindly parse JSON.
       // This is what surfaces the REAL backend error (500 / DB down / CORS etc.)
@@ -146,7 +153,7 @@ export default function TrialBalanceIntegrated() {
         const out = new Array(items.length)
         let next = 0
         const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
-          while (next < items.length) {
+          while (next < items.length && !stale()) {
             const i = next++
             out[i] = await fn(items[i])
           }
@@ -165,7 +172,7 @@ export default function TrialBalanceIntegrated() {
               toDate: endDate,
             })
 
-            const ledgerResponse = await fetch(
+            const ledgerResponse = await getJSON(
               `${API_BASE_URL}/ledgers/account-ledger?${params}`
             )
 
@@ -290,6 +297,7 @@ export default function TrialBalanceIntegrated() {
         return true
       })
 
+      if (stale()) return
       setTrialBalanceData(uniqueAccounts)
       if (failedCount > 0) {
         setError(`${failedCount} account(s) ka ledger load nahi ho saka (network/server). Dobara Calculate dabayein.`)
@@ -297,11 +305,11 @@ export default function TrialBalanceIntegrated() {
       console.log(`✅ Trial Balance ready: ${uniqueAccounts.length} unique active accounts`)
 
     } catch (error) {
+      if (stale()) return
       console.error("Error calculating trial balance:", error)
-      setError(error.message)
+      setError(error.name === "AbortError" ? "Server ne jawab nahi diya (timeout). Dobara Calculate dabayein." : error.message)
     } finally {
-      setLoading(false)
-      isCalculating.current = false
+      if (!stale()) setLoading(false)
     }
   }
 
@@ -400,7 +408,6 @@ export default function TrialBalanceIntegrated() {
             <Button
               variant="outline"
               onClick={calculateTrialBalance}
-              disabled={loading}
               className="flex items-center gap-2 bg-transparent"
             >
               <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
@@ -409,7 +416,7 @@ export default function TrialBalanceIntegrated() {
           </div>
 
           <div className="text-center mb-4 print-header">
-            <h1 className="text-3xl font-bold text-gray-800">Mustafa</h1>
+            <h1 className="text-3xl font-bold text-gray-800">demo</h1>
             <h2 className="text-2xl font-semibold text-blue-600 mt-2">TRIAL BALANCE</h2>
             <p className="text-sm text-gray-600 mt-2">(Integrated with General Ledger)</p>
           </div>
@@ -435,7 +442,6 @@ export default function TrialBalanceIntegrated() {
             </div>
             <Button
               onClick={calculateTrialBalance}
-              disabled={loading}
               className="bg-blue-600 hover:bg-blue-700 text-white"
             >
               <RefreshCw className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} />
