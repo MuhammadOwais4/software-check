@@ -683,7 +683,7 @@ export default function BankPaymentVoucher() {
             </div>
           </div>
           <div className="text-lg font-semibold mb-3 opacity-90 print:text-base print:mb-1 print:opacity-100">
-            demo
+            Mustafa
           </div>
           <CardTitle className="text-3xl font-bold tracking-wide print:text-xl print:mb-1">
             Bank Payment Voucher - BPV {isEditMode && <span className="text-sm print:hidden">(Editing)</span>}

@@ -714,7 +714,7 @@ const bankAccounts = accountOptions.filter(
               )}
             </div>
           </div>
-          <div className="text-lg font-semibold mb-3 opacity-90">demo</div>
+          <div className="text-lg font-semibold mb-3 opacity-90">Mustafa</div>
           <CardTitle className="text-3xl font-bold tracking-wide">
             Bank Receipt Voucher - BRV {isEditMode && <span className="text-sm">(Editing)</span>}
           </CardTitle>

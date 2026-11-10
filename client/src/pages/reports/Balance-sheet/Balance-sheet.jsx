@@ -467,7 +467,7 @@ function BalanceSheet() {
 
       {/* Title */}
       <h2 style={{ color: "#2c5ca9", textAlign: "center", marginBottom: "5px", fontWeight: "700", fontSize: "28px", letterSpacing: "-0.5px" }}>
-        demo<br />Balance Sheet
+        Mustafa<br />Balance Sheet
       </h2>
       <p style={{ textAlign: "center", fontWeight: "500", fontSize: "14px", color: "#6c757d", marginBottom: "40px" }}>
         {formatDateRange()}

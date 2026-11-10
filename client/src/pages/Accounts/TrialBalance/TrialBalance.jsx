@@ -11,8 +11,15 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 
-// const API_BASE_URL = "http://localhost:5000/api"
-const API_BASE_URL = "https://software-check-cbuc.vercel.app/api"
+import { API_BASE_URL } from "@/config"
+
+// Local date (yyyy-mm-dd). toISOString() converts to UTC, which shows the previous day in Karachi.
+const toLocalISO = (d) => {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, "0")
+  const day = String(d.getDate()).padStart(2, "0")
+  return `${y}-${m}-${day}`
+}
 const format = (n) => {
   const num = Number.parseFloat(n) || 0
   return num === 0 ? "0" : num.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -22,11 +29,11 @@ export default function TrialBalanceIntegrated() {
   const [startDate, setStartDate] = useState(() => {
     const today = new Date()
     const firstDay = new Date(today.getFullYear(), today.getMonth(), 1)
-    return firstDay.toISOString().split("T")[0]
+    return toLocalISO(firstDay)
   })
   const [endDate, setEndDate] = useState(() => {
     const today = new Date()
-    return today.toISOString().split("T")[0]
+    return toLocalISO(today)
   })
 
   const [trialBalanceData, setTrialBalanceData] = useState([])
@@ -133,9 +140,23 @@ export default function TrialBalanceIntegrated() {
 
       console.log(`✅ Loaded ${uniqueApiAccounts.length} unique accounts (was ${accountsData.data.length})`)
 
-      // For each unique account, fetch its ledger data
-      const trialBalanceEntries = await Promise.all(
-        uniqueApiAccounts.map(async (account) => {
+      // For each unique account, fetch its ledger data (8 at a time so the server is not flooded)
+      let failedCount = 0
+      const mapLimit = async (items, limit, fn) => {
+        const out = new Array(items.length)
+        let next = 0
+        const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+          while (next < items.length) {
+            const i = next++
+            out[i] = await fn(items[i])
+          }
+        })
+        await Promise.all(workers)
+        return out
+      }
+      const trialBalanceEntries = await mapLimit(
+        uniqueApiAccounts, 8,
+        async (account) => {
           try {
             const params = new URLSearchParams({
               accountCode: account.code || "",
@@ -152,12 +173,14 @@ export default function TrialBalanceIntegrated() {
               console.error(
                 `Ledger fetch failed for ${account.name} (HTTP ${ledgerResponse.status})`
               )
+              failedCount++
               return null
             }
 
             const ledgerData = await ledgerResponse.json()
 
             if (!ledgerData.success) {
+              failedCount++
               return null
             }
 
@@ -244,9 +267,10 @@ export default function TrialBalanceIntegrated() {
             }
           } catch (error) {
             console.error(`Error fetching ledger for ${account.name}:`, error)
+            failedCount++
             return null
           }
-        })
+        }
       )
 
       // Filter out nulls and accounts without activity
@@ -267,6 +291,9 @@ export default function TrialBalanceIntegrated() {
       })
 
       setTrialBalanceData(uniqueAccounts)
+      if (failedCount > 0) {
+        setError(`${failedCount} account(s) ka ledger load nahi ho saka (network/server). Dobara Calculate dabayein.`)
+      }
       console.log(`✅ Trial Balance ready: ${uniqueAccounts.length} unique active accounts`)
 
     } catch (error) {
@@ -382,7 +409,7 @@ export default function TrialBalanceIntegrated() {
           </div>
 
           <div className="text-center mb-4 print-header">
-            <h1 className="text-3xl font-bold text-gray-800">demo</h1>
+            <h1 className="text-3xl font-bold text-gray-800">Mustafa</h1>
             <h2 className="text-2xl font-semibold text-blue-600 mt-2">TRIAL BALANCE</h2>
             <p className="text-sm text-gray-600 mt-2">(Integrated with General Ledger)</p>
           </div>
