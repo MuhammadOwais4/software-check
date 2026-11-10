@@ -81,15 +81,15 @@ export default function TrialBalanceIntegrated() {
     return () => document.head.removeChild(style)
   }, [])
 
-  // ✅ FIX 2: Debounce useEffect to prevent double calls on mount
+  // Calculates only when the user clicks Calculate / Refresh Data (no automatic re-runs on date change).
+  // One run when the page first opens, guarded so it can never run twice on its own.
+  const didInitialRun = useRef(false)
   useEffect(() => {
-    if (startDate && endDate) {
-      const timer = setTimeout(() => {
-        calculateTrialBalance()
-      }, 300)
-      return () => clearTimeout(timer)
-    }
-  }, [startDate, endDate])
+    if (didInitialRun.current) return
+    didInitialRun.current = true
+    calculateTrialBalance()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const calculateTrialBalance = async () => {
     if (!startDate || !endDate) return
