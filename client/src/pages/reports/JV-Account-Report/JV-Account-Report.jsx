@@ -14,9 +14,9 @@ import useCurrentShop from "@/hooks/useCurrentShop"
 /* ---------------------------------------------------------------------------
    JV Account Report
    Shows every Journal Voucher (JV) line that touched
-     1. Receivable accounts   (Assets  -> type RECEIVABLES)  => "Received"
-     2. Liability accounts    (all Liabilities)
-     3. Capital accounts      (Equity  -> type Capital)
+     1. Received (Assets)     (all Assets, filter by type: CASH ACCOUNT / RECEIVABLES ...)
+     2. Liabilities           (all Liability accounts)
+     3. Equity (Capital)      (Equity accounts, Capital type first)
    with JV No, JV Date, Account, Narration and Amount.
    Click a JV No to open that JV on its own page (JV Detail).
 --------------------------------------------------------------------------- */
@@ -24,7 +24,7 @@ import useCurrentShop from "@/hooks/useCurrentShop"
 const SECTIONS = [
   {
     key: "receivable",
-    label: "Receivables (Received)",
+    label: "Received (Assets)",
     drLabel: "Receivable (Dr)",
     crLabel: "Received (Cr)",
     netLabel: "Outstanding Receivable",
@@ -42,13 +42,22 @@ const SECTIONS = [
   },
   {
     key: "capital",
-    label: "Equity - Capital Account",
+    label: "Equity (Capital)",
     drLabel: "Withdrawn (Dr)",
     crLabel: "Capital In (Cr)",
     netLabel: "Capital Balance",
     net: (dr, cr) => cr - dr,
     tone: "border-indigo-400 text-indigo-700 bg-indigo-50",
   },
+]
+
+// One colour per shop, so every row shows at a glance which shop it belongs to
+const SHOP_COLORS = [
+  { badge: "bg-blue-100 text-blue-800 border-blue-300", bar: "#3b82f6", tint: "rgba(59,130,246,0.07)" },
+  { badge: "bg-orange-100 text-orange-800 border-orange-300", bar: "#f97316", tint: "rgba(249,115,22,0.07)" },
+  { badge: "bg-purple-100 text-purple-800 border-purple-300", bar: "#a855f7", tint: "rgba(168,85,247,0.07)" },
+  { badge: "bg-teal-100 text-teal-800 border-teal-300", bar: "#14b8a6", tint: "rgba(20,184,166,0.07)" },
+  { badge: "bg-pink-100 text-pink-800 border-pink-300", bar: "#ec4899", tint: "rgba(236,72,153,0.07)" },
 ]
 
 const codeOf = (account) => String(account || "").split(" - ")[0].trim()
@@ -92,8 +101,11 @@ export default function JVAccountReport({ onOpenJV }) {
   const [search, setSearch] = useState("")
   const [accountFilter, setAccountFilter] = useState("all")
   const [shopFilter, setShopFilter] = useState("all")
+  const [typeFilter, setTypeFilter] = useState("all")
 
   const multiShop = shops.length > 1
+  const shopIndexOf = (id) => shops.findIndex((x) => String(x._id) === String(id))
+  const shopColorOf = (id) => SHOP_COLORS[Math.max(0, shopIndexOf(id)) % SHOP_COLORS.length]
   const shopNameOf = (id) => shops.find((x) => String(x._id) === String(id))?.name || ""
 
   // Accounts of ONE shop. The x-shop-id header is sent for this request only, so this also works
@@ -114,12 +126,9 @@ export default function JVAccountReport({ onOpenJV }) {
       load("/chart-of-accounts/liabilities"),
       load("/chart-of-accounts/equity"),
     ])
-    return {
-      failed,
-      receivable: assets.filter((a) => String(a.type).toUpperCase() === "RECEIVABLES"),
-      liability: liabilities,
-      capital: equity.filter((a) => String(a.type).toLowerCase() === "capital"),
-    }
+    // Grouped by chart category (Assets / Liabilities / Equity). Each account keeps its own type
+    // (CASH ACCOUNT, RECEIVABLES, Capital ...) and the "Type" filter narrows it down.
+    return { failed, receivable: assets, liability: liabilities, capital: equity }
   }
 
   const loadData = async () => {
@@ -161,7 +170,7 @@ export default function JVAccountReport({ onOpenJV }) {
         setWarning("Kuch accounts load nahi ho sakay (login/internet check karke Refresh karo).")
       } else if (total === 0) {
         setWarning(
-          "Is shop ke Chart of Accounts mein Receivable / Liability / Capital type ka koi account nahi mila. Upar se shop select karo ya Chart of Accounts mein account ki type check karo.",
+          "Chart of Accounts mein koi account nahi mila. Upar se shop select karo (ya Shop filter check karo) aur Refresh karo.",
         )
       }
     } catch (err) {
@@ -186,12 +195,34 @@ export default function JVAccountReport({ onOpenJV }) {
     return map
   }, [chart])
 
+  // "shopId|code" -> account type (CASH ACCOUNT, RECEIVABLES, Capital ...)
+  const typeByKey = useMemo(() => {
+    const map = new Map()
+    Object.entries(chart).forEach(([sid, c]) => {
+      SECTIONS.forEach((s) => (c[s.key] || []).forEach((a) => map.set(`${sid}|${String(a.code).trim()}`, String(a.type || "-"))))
+    })
+    return map
+  }, [chart])
+
+  // distinct account types of a section (for the Type dropdown)
+  const typeChoices = (sectionKey) => {
+    const set = new Set()
+    Object.entries(chart).forEach(([sid, c]) =>
+      (c[sectionKey] || []).forEach((a) => {
+        if (shopFilter !== "all" && sid !== shopFilter) return
+        set.add(String(a.type || "-"))
+      }),
+    )
+    return [...set].sort()
+  }
+
   // accounts of the active section (for the Account dropdown)
   const accountChoices = (sectionKey) => {
     const out = []
     Object.entries(chart).forEach(([sid, c]) =>
       (c[sectionKey] || []).forEach((a) => {
         if (shopFilter !== "all" && sid !== shopFilter) return
+        if (typeFilter !== "all" && String(a.type || "-") !== typeFilter) return
         out.push({ key: `${sid}|${String(a.code).trim()}`, sid, code: String(a.code), name: a.name })
       }),
     )
@@ -212,6 +243,7 @@ export default function JVAccountReport({ onOpenJV }) {
           shopId: sid,
           shopName: shopNameOf(sid),
           accountKey: `${sid}|${code}`,
+          accountType: typeByKey.get(`${sid}|${code}`) || "-",
           voucherId: v._id,
           voucherNo: v.voucherNo,
           date: v.voucherDate,
@@ -227,7 +259,7 @@ export default function JVAccountReport({ onOpenJV }) {
     })
     out.sort((a, b) => (a.day < b.day ? 1 : a.day > b.day ? -1 : String(b.voucherNo).localeCompare(String(a.voucherNo))))
     return out
-  }, [vouchers, sectionByKey, shops, headerShopId])
+  }, [vouchers, sectionByKey, typeByKey, shops, headerShopId])
 
   // date + text filters (shared by the section cards and the table)
   const baseRows = useMemo(() => {
@@ -245,19 +277,21 @@ export default function JVAccountReport({ onOpenJV }) {
     const t = {}
     SECTIONS.forEach((s) => (t[s.key] = { debit: 0, credit: 0, count: 0 }))
     baseRows.forEach((r) => {
+      // the active section's cards follow the Type filter, so cards and table always agree
+      if (r.section === activeSection && typeFilter !== "all" && r.accountType !== typeFilter) return
       t[r.section].debit += r.debit
       t[r.section].credit += r.credit
       t[r.section].count += 1
     })
     return t
-  }, [baseRows])
+  }, [baseRows, activeSection, typeFilter])
 
   const section = SECTIONS.find((s) => s.key === activeSection) || SECTIONS[0]
   const sectionAccounts = accountChoices(section.key)
 
   const rows = useMemo(
-    () => baseRows.filter((r) => r.section === section.key && (accountFilter === "all" || r.accountKey === accountFilter)),
-    [baseRows, section.key, accountFilter],
+    () => baseRows.filter((r) => r.section === section.key && (accountFilter === "all" || r.accountKey === accountFilter) && (typeFilter === "all" || r.accountType === typeFilter)),
+    [baseRows, section.key, accountFilter, typeFilter],
   )
 
   const totalDebit = rows.reduce((s, r) => s + r.debit, 0)
@@ -271,6 +305,8 @@ export default function JVAccountReport({ onOpenJV }) {
   const switchSection = (key) => {
     setActiveSection(key)
     setAccountFilter("all")
+    // Equity: show the Capital accounts first (if there are any), everything else stays one click away
+    setTypeFilter(key === "capital" && typeChoices("capital").includes("Capital") ? "Capital" : "all")
   }
 
   return (
@@ -292,7 +328,7 @@ export default function JVAccountReport({ onOpenJV }) {
             <div>
               <CardTitle className="text-2xl font-bold tracking-wide">JV Account Report</CardTitle>
               <p className="text-sm opacity-80 mt-1">
-                Journal Voucher entries of Receivables, Liabilities and Capital accounts
+                Journal Voucher entries of Received (Assets), Liabilities and Equity (Capital) accounts
               </p>
             </div>
             <div className="flex gap-2 jv-no-print">
@@ -348,6 +384,7 @@ export default function JVAccountReport({ onOpenJV }) {
                   onChange={(e) => {
                     setShopFilter(e.target.value)
                     setAccountFilter("all")
+                    setTypeFilter("all")
                   }}
                   className="h-9 w-full border border-gray-300 rounded-md px-2 text-sm bg-white"
                 >
@@ -412,6 +449,22 @@ export default function JVAccountReport({ onOpenJV }) {
           <div className="flex flex-wrap items-center gap-3 mb-3">
             <h3 className="text-lg font-bold text-gray-800">{section.label} - Details</h3>
             <div className="flex items-center gap-2 jv-no-print">
+              <span className="text-sm text-gray-600">Type:</span>
+              <select
+                value={typeFilter}
+                onChange={(e) => {
+                  setTypeFilter(e.target.value)
+                  setAccountFilter("all")
+                }}
+                className="h-9 border border-gray-300 rounded-md px-2 text-sm bg-white"
+              >
+                <option value="all">All types</option>
+                {typeChoices(section.key).map((t) => (
+                  <option key={t} value={t}>
+                    {t}
+                  </option>
+                ))}
+              </select>
               <span className="text-sm text-gray-600">Account:</span>
               <select
                 value={accountFilter}
@@ -429,6 +482,20 @@ export default function JVAccountReport({ onOpenJV }) {
             </div>
           </div>
 
+          {multiShop && (
+            <div className="flex flex-wrap items-center gap-2 mb-2 text-xs">
+              <span className="text-gray-500">Shops:</span>
+              {shops.map((x, i) => (
+                <span
+                  key={x._id}
+                  className={`inline-block px-2 py-0.5 rounded-full border font-semibold ${SHOP_COLORS[i % SHOP_COLORS.length].badge}`}
+                >
+                  Shop {i + 1}: {x.name}
+                </span>
+              ))}
+            </div>
+          )}
+
           {/* ---------- Table ---------- */}
           <div className="border border-gray-300 rounded-md overflow-auto max-h-[60vh] jv-scroll">
             <table className="w-full min-w-[950px] text-sm">
@@ -437,7 +504,7 @@ export default function JVAccountReport({ onOpenJV }) {
                   <th className="px-2 py-2 border-r border-gray-200 w-12 text-center">S.No</th>
                   <th className="px-2 py-2 border-r border-gray-200 text-left w-44">JV No</th>
                   <th className="px-2 py-2 border-r border-gray-200 text-left w-28">JV Date</th>
-                  {multiShop && <th className="px-2 py-2 border-r border-gray-200 text-left w-32">Shop</th>}
+                  {multiShop && <th className="px-2 py-2 border-r border-gray-200 text-left w-40">Shop</th>}
                   <th className="px-2 py-2 border-r border-gray-200 text-left w-24">Code</th>
                   <th className="px-2 py-2 border-r border-gray-200 text-left">Account</th>
                   <th className="px-2 py-2 border-r border-gray-200 text-left">Narration</th>
@@ -454,7 +521,15 @@ export default function JVAccountReport({ onOpenJV }) {
                   </tr>
                 ) : (
                   rows.map((r, i) => (
-                    <tr key={r.key} className="border-t border-gray-200 hover:bg-blue-50/50 align-top">
+                    <tr
+                      key={r.key}
+                      className="border-t border-gray-200 hover:bg-blue-50/50 align-top"
+                      style={
+                        multiShop
+                          ? { borderLeft: `4px solid ${shopColorOf(r.shopId).bar}`, backgroundColor: shopColorOf(r.shopId).tint }
+                          : undefined
+                      }
+                    >
                       <td className="px-2 py-1.5 text-center text-gray-600">{i + 1}</td>
                       <td className="px-2 py-1.5">
                         <button
@@ -468,7 +543,16 @@ export default function JVAccountReport({ onOpenJV }) {
                         </button>
                       </td>
                       <td className="px-2 py-1.5 whitespace-nowrap">{formatDate(r.date)}</td>
-                      {multiShop && <td className="px-2 py-1.5">{r.shopName || "-"}</td>}
+                      {multiShop && (
+                        <td className="px-2 py-1.5">
+                          <span
+                            className={`inline-block px-2 py-0.5 rounded-full border text-xs font-semibold ${shopColorOf(r.shopId).badge}`}
+                          >
+                            {shopIndexOf(r.shopId) >= 0 ? `Shop ${shopIndexOf(r.shopId) + 1}: ` : ""}
+                            {r.shopName || "-"}
+                          </span>
+                        </td>
+                      )}
                       <td className="px-2 py-1.5 font-mono">{r.code}</td>
                       <td className="px-2 py-1.5 font-medium text-gray-800">{r.name}</td>
                       <td className="px-2 py-1.5 text-gray-600">{r.narration || "-"}</td>
