@@ -59,6 +59,7 @@ const REPORT_ITEMS = [
   { key: "Voucher Query",      label: "Voucher Query" },
   { key: "Barcode Scanner",    label: "Barcode Scanner" },
   { key: "Stock Ledger",       label: "Stock Ledger" },
+  { key: "JV Account Report",  label: "JV Account Report" },
 ];
 
 const ACCOUNT_ITEMS = [
