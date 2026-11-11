@@ -105,12 +105,12 @@ export default function TrialBalanceIntegrated() {
         } catch {
           msg = await response.text()
         }
-        throw new Error(`Trial balance load nahi hua (HTTP ${response.status}): ${msg}`)
+        throw new Error(`Failed to load trial balance (HTTP ${response.status}): ${msg}`)
       }
 
       const result = await response.json()
       if (!result.success || !Array.isArray(result.data)) {
-        throw new Error(result.message || "Trial balance load nahi hua")
+        throw new Error(result.message || "Failed to load trial balance")
       }
       const failedCount = result.failed || 0
 
@@ -183,14 +183,14 @@ export default function TrialBalanceIntegrated() {
       setTrialBalanceData(uniqueAccounts)
       setCalculated(true)
       if (failedCount > 0) {
-        setError(`${failedCount} account(s) ka ledger load nahi ho saka (network/server). Dobara Calculate dabayein.`)
+        setError(`${failedCount} account(s) could not be loaded (network/server). Please click Calculate again.`)
       }
       console.log(`✅ Trial Balance ready: ${uniqueAccounts.length} unique active accounts`)
 
     } catch (error) {
       if (stale()) return
       console.error("Error calculating trial balance:", error)
-      setError(error.name === "AbortError" ? "Server ne jawab nahi diya (timeout). Dobara Calculate dabayein." : error.message)
+      setError(error.name === "AbortError" ? "The server did not respond (timeout). Please click Calculate again." : error.message)
     } finally {
       if (!stale()) setLoading(false)
     }
@@ -472,7 +472,7 @@ export default function TrialBalanceIntegrated() {
                           ? "No accounts found matching your search"
                           : calculated
                             ? "No accounts with activity in this period"
-                            : "Period chun kar Calculate dabayein"}
+                            : "Select a period and click Calculate"}
                       </div>
                     </td>
                   </tr>

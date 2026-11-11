@@ -58,10 +58,10 @@ export default function AccountWiseBalances() {
         } catch {
           msg = await res.text()
         }
-        throw new Error(`Report load nahi hui (HTTP ${res.status}): ${msg}`)
+        throw new Error(`Failed to load report (HTTP ${res.status}): ${msg}`)
       }
       const json = await res.json()
-      if (!json.success || !Array.isArray(json.data)) throw new Error(json.message || "Report load nahi hui")
+      if (!json.success || !Array.isArray(json.data)) throw new Error(json.message || "Failed to load report")
 
       const out = json.data
         .map((item) => {
@@ -86,10 +86,10 @@ export default function AccountWiseBalances() {
       if (run !== runRef.current) return
       setRows(out)
       setCalculated(true)
-      if (json.failed > 0) setError(`${json.failed} account(s) load nahi ho sake. Dobara Calculate dabayein.`)
+      if (json.failed > 0) setError(`${json.failed} account(s) could not be loaded. Please click Calculate again.`)
     } catch (e) {
       if (run !== runRef.current) return
-      setError(e.name === "AbortError" ? "Server ne jawab nahi diya (timeout). Dobara try karein." : e.message)
+      setError(e.name === "AbortError" ? "The server did not respond (timeout). Please try again." : e.message)
     } finally {
       clearTimeout(timer)
       if (run === runRef.current) setLoading(false)
@@ -203,7 +203,7 @@ export default function AccountWiseBalances() {
           {loading ? (
             <div className="py-16 text-center text-gray-500">
               <RefreshCw className="h-8 w-8 animate-spin mx-auto mb-3 text-blue-600" />
-              Balances calculate ho rahe hain...
+              Calculating balances...
             </div>
           ) : (
             <table className="w-full text-sm border-collapse">
@@ -219,7 +219,7 @@ export default function AccountWiseBalances() {
                 {visible.length === 0 && (
                   <tr>
                     <td colSpan={4} className="border px-3 py-8 text-center text-gray-500">
-                      {calculated ? "Is date tak koi balance nahi mila." : "Date / category chun kar Calculate dabayein."}
+                      {calculated ? "No balances found up to this date." : "Select a date / category and click Calculate."}
                     </td>
                   </tr>
                 )}

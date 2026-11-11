@@ -742,14 +742,17 @@ const getAccountLedger = async (req, res) => {
       })
     })
 
-    try {
-      await Ledger.deleteMany({ accountCode: finalAccountCode, date: { $gte: from, $lte: to } })
-      if (ledgerDocsToSave.length > 0) {
-        await Ledger.insertMany(ledgerDocsToSave)
-        console.log(`✅ Saved ${ledgerDocsToSave.length} ledger entries`)
+    // noSave=1 is used by the trial balance / balances report (read-only, much faster)
+    if (req.query.noSave !== "1") {
+      try {
+        await Ledger.deleteMany({ accountCode: finalAccountCode, date: { $gte: from, $lte: to } })
+        if (ledgerDocsToSave.length > 0) {
+          await Ledger.insertMany(ledgerDocsToSave)
+          console.log(`✅ Saved ${ledgerDocsToSave.length} ledger entries`)
+        }
+      } catch (dbError) {
+        console.error("❌ Ledger DB save error:", dbError.message)
       }
-    } catch (dbError) {
-      console.error("❌ Ledger DB save error:", dbError.message)
     }
 
     const totalDebits  = ledgerEntries.reduce((s, e) => s + e.debit,  0)
@@ -829,6 +832,39 @@ function determineEntryType(voucherType, debit, credit) {
 // Whole trial balance in ONE request (one DB connection) instead of one request per account.
 // Reuses getAllAccounts + getAccountLedger so the numbers are identical to the ledger.
 // ═══════════════════════════════════════════════════════════════════════════════
+// Per-request read cache: while the trial balance runs, identical lean find() queries
+// (the same vouchers / sales / SPV ... for every account) hit the database only once.
+const { AsyncLocalStorage } = require("async_hooks")
+const mongoose = require("mongoose")
+const memoStore = new AsyncLocalStorage()
+if (!mongoose.Query.prototype.__memoPatched) {
+  const origExec = mongoose.Query.prototype.exec
+  mongoose.Query.prototype.exec = function (...args) {
+    const store = memoStore.getStore()
+    const lean = this._mongooseOptions && this._mongooseOptions.lean
+    if (!store || !lean || !["find", "findOne", "countDocuments"].includes(this.op)) {
+      return origExec.apply(this, args)
+    }
+    let key
+    try {
+      key = [
+        this.model.modelName, this.op,
+        JSON.stringify(this.getFilter()), JSON.stringify(this.getOptions()),
+        JSON.stringify(this._fields || null), JSON.stringify(this._mongooseOptions.populate || null),
+      ].join("|")
+    } catch (_) {
+      return origExec.apply(this, args)
+    }
+    let p = store.get(key)
+    if (!p) {
+      p = origExec.apply(this, args)
+      store.set(key, p)
+    }
+    return p.then((r) => (r && typeof r === "object" ? structuredClone(r) : r))
+  }
+  mongoose.Query.prototype.__memoPatched = true
+}
+
 const callController = (fn, query) =>
   new Promise((resolve) => {
     const fakeRes = {
@@ -841,7 +877,9 @@ const callController = (fn, query) =>
       .catch((e) => resolve({ status: 500, body: { success: false, message: e.message } }))
   })
 
-const getTrialBalance = async (req, res) => {
+const getTrialBalance = (req, res) => memoStore.run(new Map(), () => buildTrialBalance(req, res))
+
+const buildTrialBalance = async (req, res) => {
   try {
     const { fromDate, toDate } = req.query
     if (!fromDate || !toDate)
@@ -867,7 +905,7 @@ const getTrialBalance = async (req, res) => {
         const i = next++
         const a = accounts[i]
         const r = await callController(getAccountLedger, {
-          accountCode: a.code || "", accountName: a.name || "", fromDate, toDate,
+          accountCode: a.code || "", accountName: a.name || "", fromDate, toDate, noSave: "1",
         })
         if (r.status !== 200 || !r.body || !r.body.success) { failed++; rows[i] = null; continue }
         let debit = 0, credit = 0
@@ -881,7 +919,7 @@ const getTrialBalance = async (req, res) => {
         }
       }
     }
-    await Promise.all(Array.from({ length: 4 }, worker))
+    await Promise.all(Array.from({ length: 10 }, worker))
 
     res.status(200).json({ success: true, failed, total: accounts.length, data: rows.filter(Boolean) })
   } catch (error) {
