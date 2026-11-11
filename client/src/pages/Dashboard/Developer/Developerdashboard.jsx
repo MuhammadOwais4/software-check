@@ -40,6 +40,7 @@ import ShopSwitcher from "@/components/components/ShopSwitcher";
 import ChangePassword from "@/components/components/ChangePassword";
 import AccountWiseBalances from "@/pages/reports/Account-Wise-Balances/Account-Wise-Balances";
 import Icon from "@/assets/icon.png";
+import JVAccountReport from "@/pages/reports/JV-Account-Report/JV-Account-Report";
 
 const MASTER_PROFILE_ITEMS = [
   { key: "Raw Material",  label: "Raw Material" },
@@ -277,6 +278,13 @@ export default function DeveloperDashboard() {
         {activeTab === "Voucher Query"      && <VoucherQuery />}
         {activeTab === "Barcode Scanner"    && <BarcodeScannerScreen />}
         {activeTab === "Stock Ledger"       && <StockLedger />}
+        {activeTab === "JV Account Report"  && <JVAccountReport onOpenJV={(id) => setActiveTab("JV Detail:" + id)} />}
+        {activeTab.startsWith("JV Detail:") && (
+        <JVDetail
+                    id={activeTab.slice("JV Detail:".length)}
+                    onBack={() => setActiveTab("JV Account Report")}
+                  />
+                )}
 
         {activeTab === "chart-of-accounts" && (
           <>

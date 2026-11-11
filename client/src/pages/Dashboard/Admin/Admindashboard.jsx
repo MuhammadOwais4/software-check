@@ -220,7 +220,7 @@ export default function AdminDashboard() {
         {activeTab === "reports"            && <Reports products={products} expenses={expenses} sales={sales} />}
         {activeTab === "General Ledger"     && <GeneralLedger />}
         {activeTab === "Trial Balance"      && <TrialBalance />}
-        {activeTab === "Account Wise Balances" && <AccountWiseBalances />}
+        {activeTab === "Account Wise Balances Sheet" && <AccountWiseBalances />}
         {activeTab === "Opening Trial Balance" && <OpeningTrialBalance />}
         {activeTab === "JV Account Report"  && <JVAccountReport onOpenJV={(id) => setActiveTab("JV Detail:" + id)} />}
         {activeTab.startsWith("JV Detail:") && (
