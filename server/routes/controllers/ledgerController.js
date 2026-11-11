@@ -824,4 +824,70 @@ function determineEntryType(voucherType, debit, credit) {
   return "JOURNAL"
 }
 
-module.exports = { getAllAccounts, getAccountLedger }
+// ═══════════════════════════════════════════════════════════════════════════════
+// GET /api/ledgers/trial-balance?fromDate=&toDate=
+// Whole trial balance in ONE request (one DB connection) instead of one request per account.
+// Reuses getAllAccounts + getAccountLedger so the numbers are identical to the ledger.
+// ═══════════════════════════════════════════════════════════════════════════════
+const callController = (fn, query) =>
+  new Promise((resolve) => {
+    const fakeRes = {
+      statusCode: 200,
+      status(c) { this.statusCode = c; return this },
+      json(b) { resolve({ status: this.statusCode, body: b }); return this },
+    }
+    Promise.resolve(fn({ query, params: {}, body: {}, headers: {} }, fakeRes))
+      .then(() => resolve({ status: fakeRes.statusCode, body: null }))
+      .catch((e) => resolve({ status: 500, body: { success: false, message: e.message } }))
+  })
+
+const getTrialBalance = async (req, res) => {
+  try {
+    const { fromDate, toDate } = req.query
+    if (!fromDate || !toDate)
+      return res.status(400).json({ success: false, message: "From date and to date are required" })
+
+    const acc = await callController(getAllAccounts, {})
+    if (!acc.body || !acc.body.success)
+      return res.status(500).json({ success: false, message: acc.body?.message || "Failed to load accounts" })
+
+    const seen = new Set()
+    const accounts = acc.body.data.filter((a) => {
+      const k = a.code || a.name
+      if (seen.has(k)) return false
+      seen.add(k)
+      return true
+    })
+
+    const rows = new Array(accounts.length)
+    let failed = 0
+    let next = 0
+    const worker = async () => {
+      while (next < accounts.length) {
+        const i = next++
+        const a = accounts[i]
+        const r = await callController(getAccountLedger, {
+          accountCode: a.code || "", accountName: a.name || "", fromDate, toDate,
+        })
+        if (r.status !== 200 || !r.body || !r.body.success) { failed++; rows[i] = null; continue }
+        let debit = 0, credit = 0
+        ;(r.body.data.entries || []).forEach((e) => { debit += e.debit || 0; credit += e.credit || 0 })
+        rows[i] = {
+          account: { code: a.code, name: a.name, category: a.category, normalBalance: a.normalBalance },
+          currentDebit: debit,
+          currentCredit: credit,
+          openingBalance: r.body.data.summary?.openingBalance || 0,
+          closingBalance: r.body.data.summary?.closingBalance || 0,
+        }
+      }
+    }
+    await Promise.all(Array.from({ length: 4 }, worker))
+
+    res.status(200).json({ success: true, failed, total: accounts.length, data: rows.filter(Boolean) })
+  } catch (error) {
+    console.error("Error building trial balance:", error)
+    res.status(500).json({ success: false, message: "Error building trial balance", error: error.message })
+  }
+}
+
+module.exports = { getAllAccounts, getAccountLedger, getTrialBalance }

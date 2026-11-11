@@ -347,7 +347,7 @@ export default function SalesDiscountManagement() {
                     )}
                   </div>                 
                 </div>
-                <div className="text-lg font-semibold mb-3 opacity-90">Mustafa</div>
+                <div className="text-lg font-semibold mb-3 opacity-90">demo</div>
                 <CardTitle className="text-3xl font-bold tracking-wide">
                   Sales Discount {isEditMode && <span className="text-sm">(Editing)</span>}
                 </CardTitle>
@@ -623,7 +623,7 @@ export default function SalesDiscountManagement() {
           <div className="print-area px-10 py-12">
             <div className="max-w-4xl mx-auto">
               <header className="text-center mb-6 border-b-2 border-gray-300 pb-4">
-                <h1 className="text-2xl font-bold text-black">Mustafa</h1>
+                <h1 className="text-2xl font-bold text-black">demo</h1>
                 <p className="text-base text-gray-700 mt-1">Sales Discount Document</p>
               </header>
 

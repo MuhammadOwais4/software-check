@@ -100,185 +100,74 @@ export default function TrialBalanceIntegrated() {
     setError(null)
 
     try {
-      console.log("📊 Fetching all accounts from ledger API...")
+      // One request: the server builds the whole trial balance (one DB connection).
+      const params = new URLSearchParams({ fromDate: startDate, toDate: endDate })
+      const response = await getJSON(`${API_BASE_URL}/ledgers/trial-balance?${params}`, 120000)
 
-      // Fetch all accounts
-      const accountsResponse = await getJSON(`${API_BASE_URL}/ledgers/accounts`)
-
-      // ✅ Check HTTP status first — don't blindly parse JSON.
-      // This is what surfaces the REAL backend error (500 / DB down / CORS etc.)
-      // instead of a generic "Failed to fetch accounts" message.
-      if (!accountsResponse.ok) {
-        let backendMessage = ""
+      if (!response.ok) {
+        let msg = ""
         try {
-          const errJson = await accountsResponse.json()
-          backendMessage = errJson.message || errJson.error || JSON.stringify(errJson)
+          const j = await response.json()
+          msg = j.message || j.error || JSON.stringify(j)
         } catch {
-          backendMessage = await accountsResponse.text()
+          msg = await response.text()
         }
-        throw new Error(
-          `Failed to fetch accounts (HTTP ${accountsResponse.status}): ${backendMessage}`
-        )
+        throw new Error(`Trial balance load nahi hua (HTTP ${response.status}): ${msg}`)
       }
 
-      const accountsData = await accountsResponse.json()
-
-      if (!accountsData.success) {
-        throw new Error(
-          `Failed to fetch accounts: ${accountsData.message || accountsData.error || "Unknown backend error"}`
-        )
+      const result = await response.json()
+      if (!result.success || !Array.isArray(result.data)) {
+        throw new Error(result.message || "Trial balance load nahi hua")
       }
+      const failedCount = result.failed || 0
 
-      if (!Array.isArray(accountsData.data)) {
-        throw new Error("Failed to fetch accounts: backend returned no account data array")
-      }
+      const trialBalanceEntries = result.data.map((item) => {
+        const account = item.account
+        const currentDebit = item.currentDebit || 0
+        const currentCredit = item.currentCredit || 0
+        const openingBalance = item.openingBalance || 0
+        const closingBalance = item.closingBalance || 0
 
-      // ✅ FIX 4: Deduplicate accounts from API before processing
-      const seen = new Set()
-      const uniqueApiAccounts = accountsData.data.filter(account => {
-        const key = account.code || account.name
-        if (seen.has(key)) {
-          console.warn(`⚠️ Duplicate account from API: ${key}`)
-          return false
+        const normalBalance =
+          account.normalBalance ||
+          (account.category === "Assets" || account.category === "Expenses" ? "debit" : "credit")
+
+        let openingDebit = 0, openingCredit = 0
+        if (openingBalance > 0) {
+          if (normalBalance === "debit") openingDebit = openingBalance
+          else openingCredit = openingBalance
+        } else if (openingBalance < 0) {
+          if (normalBalance === "debit") openingCredit = Math.abs(openingBalance)
+          else openingDebit = Math.abs(openingBalance)
         }
-        seen.add(key)
-        return true
+
+        let closingDebit = 0, closingCredit = 0
+        if (closingBalance > 0) {
+          if (normalBalance === "debit") closingDebit = closingBalance
+          else closingCredit = closingBalance
+        } else if (closingBalance < 0) {
+          if (normalBalance === "debit") closingCredit = Math.abs(closingBalance)
+          else closingDebit = Math.abs(closingBalance)
+        }
+
+        if (account.code === "PURCH-DISC" || account.name === "PURCHASES DISCOUNT") {
+          if (closingBalance !== 0) { closingDebit = 0; closingCredit = Math.abs(closingBalance) }
+        }
+        if (account.code === "SALES-DISC" || account.name === "SALES DISCOUNT") {
+          if (closingBalance !== 0) { closingCredit = 0; closingDebit = Math.abs(closingBalance) }
+        }
+
+        return {
+          code: account.code,
+          name: account.name,
+          category: account.category,
+          normalBalance,
+          openingDebit, openingCredit,
+          currentDebit, currentCredit,
+          closingDebit, closingCredit,
+          hasActivity: currentDebit > 0 || currentCredit > 0 || openingBalance !== 0,
+        }
       })
-
-      console.log(`✅ Loaded ${uniqueApiAccounts.length} unique accounts (was ${accountsData.data.length})`)
-
-      // For each unique account, fetch its ledger data (8 at a time so the server is not flooded)
-      let failedCount = 0
-      const mapLimit = async (items, limit, fn) => {
-        const out = new Array(items.length)
-        let next = 0
-        const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
-          while (next < items.length && !stale()) {
-            const i = next++
-            out[i] = await fn(items[i])
-          }
-        })
-        await Promise.all(workers)
-        return out
-      }
-      const trialBalanceEntries = await mapLimit(
-        uniqueApiAccounts, 8,
-        async (account) => {
-          try {
-            const params = new URLSearchParams({
-              accountCode: account.code || "",
-              accountName: account.name || "",
-              fromDate: startDate,
-              toDate: endDate,
-            })
-
-            const ledgerResponse = await getJSON(
-              `${API_BASE_URL}/ledgers/account-ledger?${params}`
-            )
-
-            if (!ledgerResponse.ok) {
-              console.error(
-                `Ledger fetch failed for ${account.name} (HTTP ${ledgerResponse.status})`
-              )
-              failedCount++
-              return null
-            }
-
-            const ledgerData = await ledgerResponse.json()
-
-            if (!ledgerData.success) {
-              failedCount++
-              return null
-            }
-
-            // Calculate totals from ledger entries
-            let currentDebit = 0
-            let currentCredit = 0
-
-            ledgerData.data.entries.forEach((entry) => {
-              currentDebit += entry.debit || 0
-              currentCredit += entry.credit || 0
-            })
-
-            const openingBalance = ledgerData.data.summary.openingBalance || 0
-            const closingBalance = ledgerData.data.summary.closingBalance || 0
-
-            // Determine opening debit/credit based on normal balance
-            const normalBalance = account.normalBalance || (account.category === 'Assets' || account.category === 'Expenses' ? 'debit' : 'credit')
-
-            let openingDebit = 0
-            let openingCredit = 0
-
-            if (openingBalance > 0) {
-              if (normalBalance === 'debit') {
-                openingDebit = openingBalance
-              } else {
-                openingCredit = openingBalance
-              }
-            } else if (openingBalance < 0) {
-              if (normalBalance === 'debit') {
-                openingCredit = Math.abs(openingBalance)
-              } else {
-                openingDebit = Math.abs(openingBalance)
-              }
-            }
-
-            // Determine closing debit/credit based on normal balance
-            let closingDebit = 0
-            let closingCredit = 0
-
-            if (closingBalance > 0) {
-              if (normalBalance === 'debit') {
-                closingDebit = closingBalance
-              } else {
-                closingCredit = closingBalance
-              }
-            } else if (closingBalance < 0) {
-              if (normalBalance === 'debit') {
-                closingCredit = Math.abs(closingBalance)
-              } else {
-                closingDebit = Math.abs(closingBalance)
-              }
-            }
-
-            // ✅ Purchase Discount Special Handling
-            if (account.code === 'PURCH-DISC' || account.name === 'PURCHASES DISCOUNT') {
-              if (closingBalance !== 0) {
-                closingDebit = 0
-                closingCredit = Math.abs(closingBalance)
-              }
-            }
-
-            // ✅ Sales Discount Special Handling
-            if (account.code === 'SALES-DISC' || account.name === 'SALES DISCOUNT') {
-              if (closingBalance !== 0) {
-                closingCredit = 0
-                closingDebit = Math.abs(closingBalance)
-              }
-            }
-
-            const hasActivity = currentDebit > 0 || currentCredit > 0 || openingBalance !== 0
-
-            return {
-              code: account.code,
-              name: account.name,
-              category: account.category,
-              normalBalance,
-              openingDebit,
-              openingCredit,
-              currentDebit,
-              currentCredit,
-              closingDebit,
-              closingCredit,
-              hasActivity,
-            }
-          } catch (error) {
-            console.error(`Error fetching ledger for ${account.name}:`, error)
-            failedCount++
-            return null
-          }
-        }
-      )
 
       // Filter out nulls and accounts without activity
       const activeAccounts = trialBalanceEntries.filter(

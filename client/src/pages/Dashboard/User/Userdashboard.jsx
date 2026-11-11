@@ -24,6 +24,7 @@ import JVDetail from "@/pages/reports/JV-Account-Report/JV-Detail";
 import Dashboard from "@/pages/Dashboard/Dashboard.jsx";
 import ShopSwitcher from "@/components/components/ShopSwitcher";
 import ChangePassword from "@/components/components/ChangePassword";
+import AccountWiseBalances from "@/pages/reports/Account-Wise-Balances/Account-Wise-Balances";
 import Icon from "@/assets/icon.png";
 
 const REPORT_ITEMS = [
@@ -31,6 +32,7 @@ const REPORT_ITEMS = [
   { key: "Trial Balance",     label: "Trial Balance" },
   { key: "Opening Trial Balance", label: "Opening Trial Balance" },
   { key: "JV Account Report", label: "JV Account Report" },
+  { key: "Account Wise Balances", label: "Account Wise Balances" },
 ];
 
 const ACCOUNT_ITEMS = [
@@ -218,6 +220,7 @@ export default function UserDashboard() {
 
         {activeTab === "General Ledger"       && <GeneralLedger />}
         {activeTab === "Trial Balance"        && <TrialBalance />}
+        {activeTab === "Account Wise Balances" && <AccountWiseBalances />}
         {activeTab === "Opening Trial Balance" && <OpeningTrialBalance />}
         {activeTab === "JV Account Report"    && <JVAccountReport onOpenJV={(id) => setActiveTab("JV Detail:" + id)} />}
         {activeTab.startsWith("JV Detail:")   && (

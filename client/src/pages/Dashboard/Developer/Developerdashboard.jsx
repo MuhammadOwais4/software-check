@@ -38,6 +38,7 @@ import FinishedGoodPage from "@/pages/Master-Profile/Finishedgood/Finishedgood";
 import UsersShops from "@/pages/Users-Shops/Users-Shops";
 import ShopSwitcher from "@/components/components/ShopSwitcher";
 import ChangePassword from "@/components/components/ChangePassword";
+import AccountWiseBalances from "@/pages/reports/Account-Wise-Balances/Account-Wise-Balances";
 import Icon from "@/assets/icon.png";
 
 const MASTER_PROFILE_ITEMS = [
@@ -49,6 +50,7 @@ const REPORT_ITEMS = [
   { key: "General Ledger",     label: "General Ledger" },
   { key: "Trial Balance",      label: "Trial Balance" },
   { key: "Opening Trial Balance", label: "Opening Trial Balance" },
+  { key: "Account Wise Balances", label: "Account Wise Balances" },
   { key: "Balance Sheet",      label: "Balance Sheet" },
   { key: "ProfitLoss",         label: "Profit & Loss" },
   { key: "reports",            label: "Business Reports" },
@@ -267,6 +269,7 @@ export default function DeveloperDashboard() {
         {activeTab === "reports"            && <Reports products={products} expenses={expenses} sales={sales} />}
         {activeTab === "General Ledger"     && <GeneralLedger />}
         {activeTab === "Trial Balance"      && <TrialBalance />}
+        {activeTab === "Account Wise Balances" && <AccountWiseBalances />}
         {activeTab === "Opening Trial Balance" && <OpeningTrialBalance />}
         {activeTab === "Balance Sheet"      && <BalanceSheet />}
         {activeTab === "ProfitLoss"         && <ProfitLoss />}

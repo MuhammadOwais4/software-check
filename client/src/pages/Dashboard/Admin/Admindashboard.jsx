@@ -35,6 +35,7 @@ import BarcodeScannerScreen from "@/pages/Barcode-Scanner-Screen/Barcode-Scanner
 import OverheadPayment from "@/pages/Accounts/Overhead-Payment/Overhead-Payment.jsx";
 import UsersShops from "@/pages/Users-Shops/Users-Shops";
 import ShopSwitcher from "@/components/components/ShopSwitcher";
+import AccountWiseBalances from "@/pages/reports/Account-Wise-Balances/Account-Wise-Balances";
 import Icon from "@/assets/icon.png";
 
 const REPORT_ITEMS = [
@@ -42,6 +43,7 @@ const REPORT_ITEMS = [
   { key: "Trial Balance",      label: "Trial Balance" },
   { key: "Opening Trial Balance", label: "Opening Trial Balance" },
   { key: "JV Account Report",  label: "JV Account Report" },
+  { key: "Account Wise Balances", label: "Account Wise Balances" },
 ];
 
 const ACCOUNT_ITEMS = [
@@ -218,6 +220,7 @@ export default function AdminDashboard() {
         {activeTab === "reports"            && <Reports products={products} expenses={expenses} sales={sales} />}
         {activeTab === "General Ledger"     && <GeneralLedger />}
         {activeTab === "Trial Balance"      && <TrialBalance />}
+        {activeTab === "Account Wise Balances" && <AccountWiseBalances />}
         {activeTab === "Opening Trial Balance" && <OpeningTrialBalance />}
         {activeTab === "JV Account Report"  && <JVAccountReport onOpenJV={(id) => setActiveTab("JV Detail:" + id)} />}
         {activeTab.startsWith("JV Detail:") && (
