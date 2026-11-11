@@ -43,7 +43,7 @@ const REPORT_ITEMS = [
   { key: "Trial Balance",      label: "Trial Balance" },
   { key: "Opening Trial Balance", label: "Opening Trial Balance" },
   { key: "JV Account Report",  label: "JV Account Report" },
-  { key: "Account Wise Balances", label: "Account Wise Balances" },
+  { key: "Account Wise Balances Sheet", label: "Account Wise Balances Sheet" },
 ];
 
 const ACCOUNT_ITEMS = [
