@@ -40,6 +40,7 @@ export default function TrialBalanceIntegrated() {
   const [loading, setLoading] = useState(false)
   const [searchTerm, setSearchTerm] = useState("")
   const [error, setError] = useState(null)
+  const [calculated, setCalculated] = useState(false)
 
   // ✅ FIX 1: Ref to prevent double API calls
   // Every Calculate click starts a fresh run; an older run that is still going is ignored.
@@ -81,15 +82,7 @@ export default function TrialBalanceIntegrated() {
     return () => document.head.removeChild(style)
   }, [])
 
-  // Calculates only when the user clicks Calculate / Refresh Data (no automatic re-runs on date change).
-  // One run when the page first opens, guarded so it can never run twice on its own.
-  const didInitialRun = useRef(false)
-  useEffect(() => {
-    if (didInitialRun.current) return
-    didInitialRun.current = true
-    calculateTrialBalance()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  // Nothing loads automatically: the user clicks Calculate (or Refresh Data).
 
   const calculateTrialBalance = async () => {
     if (!startDate || !endDate) return
@@ -188,6 +181,7 @@ export default function TrialBalanceIntegrated() {
 
       if (stale()) return
       setTrialBalanceData(uniqueAccounts)
+      setCalculated(true)
       if (failedCount > 0) {
         setError(`${failedCount} account(s) ka ledger load nahi ho saka (network/server). Dobara Calculate dabayein.`)
       }
@@ -476,7 +470,9 @@ export default function TrialBalanceIntegrated() {
                       <div className="text-lg mb-2">
                         {searchTerm
                           ? "No accounts found matching your search"
-                          : "No accounts with activity in this period"}
+                          : calculated
+                            ? "No accounts with activity in this period"
+                            : "Period chun kar Calculate dabayein"}
                       </div>
                     </td>
                   </tr>

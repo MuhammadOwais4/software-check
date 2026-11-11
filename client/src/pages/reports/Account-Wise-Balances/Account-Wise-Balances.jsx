@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useMemo, useRef } from "react"
+import { useState, useMemo, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -34,7 +34,7 @@ export default function AccountWiseBalances() {
   const [search, setSearch] = useState("")
   const [category, setCategory] = useState("All")
   const runRef = useRef(0)
-  const didInit = useRef(false)
+  const [calculated, setCalculated] = useState(false) // nothing loads until the user clicks Calculate
 
   const load = async () => {
     if (!asOn) return
@@ -85,6 +85,7 @@ export default function AccountWiseBalances() {
 
       if (run !== runRef.current) return
       setRows(out)
+      setCalculated(true)
       if (json.failed > 0) setError(`${json.failed} account(s) load nahi ho sake. Dobara Calculate dabayein.`)
     } catch (e) {
       if (run !== runRef.current) return
@@ -94,13 +95,6 @@ export default function AccountWiseBalances() {
       if (run === runRef.current) setLoading(false)
     }
   }
-
-  useEffect(() => {
-    if (didInit.current) return
-    didInit.current = true
-    load()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
 
   const visible = useMemo(() => {
     const t = search.trim().toLowerCase()
@@ -225,7 +219,7 @@ export default function AccountWiseBalances() {
                 {visible.length === 0 && (
                   <tr>
                     <td colSpan={4} className="border px-3 py-8 text-center text-gray-500">
-                      Is date tak koi balance nahi mila.
+                      {calculated ? "Is date tak koi balance nahi mila." : "Date / category chun kar Calculate dabayein."}
                     </td>
                   </tr>
                 )}
