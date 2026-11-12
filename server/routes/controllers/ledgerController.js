@@ -847,6 +847,18 @@ function determineEntryType(voucherType, debit, credit) {
 // (the same vouchers / sales / SPV ... for every account) hit the database only once.
 const { AsyncLocalStorage } = require("async_hooks")
 const mongoose = require("mongoose")
+// Deep copy of query results that keeps ObjectId / Decimal128 / Date intact.
+// (structuredClone turns an ObjectId into a plain object, which broke shopId / _id comparisons.)
+const cloneKeepIds = (v) => {
+  if (v === null || typeof v !== "object") return v
+  if (v instanceof Date) return new Date(v.getTime())
+  if (v._bsontype || v instanceof mongoose.Types.ObjectId || Buffer.isBuffer(v)) return v // immutable BSON values
+  if (Array.isArray(v)) return v.map(cloneKeepIds)
+  const out = {}
+  for (const k of Object.keys(v)) out[k] = cloneKeepIds(v[k])
+  return out
+}
+
 const memoStore = new AsyncLocalStorage()
 if (!mongoose.Query.prototype.__memoPatched) {
   const origExec = mongoose.Query.prototype.exec
@@ -871,7 +883,7 @@ if (!mongoose.Query.prototype.__memoPatched) {
       p = origExec.apply(this, args)
       store.set(key, p)
     }
-    return p.then((r) => (r && typeof r === "object" ? structuredClone(r) : r))
+    return p.then((r) => (r && typeof r === "object" ? cloneKeepIds(r) : r))
   }
   mongoose.Query.prototype.__memoPatched = true
 }
