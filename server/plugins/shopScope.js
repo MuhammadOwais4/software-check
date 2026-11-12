@@ -46,6 +46,7 @@ module.exports = function shopScope(schema) {
   // 3) queries
   QUERY_OPS.forEach((op) => {
     schema.pre(op, function () {
+      if (this.getOptions && this.getOptions().skipShopScope) return // query filters by itself (e.g. multi-shop JV rows)
       const ctx = getContext()
       if (ctx && ctx.shopId) this.where({ shopId: ctx.shopId })
     })

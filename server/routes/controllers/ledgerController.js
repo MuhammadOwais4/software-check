@@ -13,6 +13,8 @@ const { SupplierPaymentVoucher } = require("../models/Supplierpaymentvouchers")
 const { CustomerReceiptVoucher } = require("../models/CustomerReceiptVoucher")
 const OverheadVoucher = require("../models/Overheadcategory")
 const OpeningBalance = require("../models/OpeningBalance")
+const Shop = require("../models/Shop")
+const { getContext, als } = require("../../middleware/shopContext")
 
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -218,13 +220,22 @@ const getAccountLedger = async (req, res) => {
     // 1. VOUCHERS
     // ══════════════════════════════════════════════════════════════════════════
     if (!isDiscountAccount && !isTaxAcc) {
-      const vouchers = await Voucher.find({
+      // A Journal Voucher can mix shops: every row carries its own shopId, while the voucher header
+      // only has the shop it was saved from. So with a shop selected we pick vouchers that have a row
+      // (or the header) in that shop, and then keep only the rows that belong to that shop.
+      const shopCtx = getContext()
+      const scopeShop = shopCtx && shopCtx.shopId ? String(shopCtx.shopId) : null
+      const voucherFilter = {
         voucherDate: { $gte: from, $lte: to },
         status: { $ne: "cancelled" },
-      }).sort({ voucherDate: 1 }).lean()
+      }
+      if (scopeShop) voucherFilter.$or = [{ shopId: scopeShop }, { "entries.shopId": scopeShop }]
+      const vouchers = await Voucher.find(voucherFilter).setOptions({ skipShopScope: true })
+        .sort({ voucherDate: 1 }).lean()
 
       vouchers.forEach((voucher) => {
         voucher.entries?.forEach((entry) => {
+          if (scopeShop && String(entry.shopId || voucher.shopId || "") !== scopeShop) return
           if (
             matchAccount(entry.account     || "", accountCode, accountName) ||
             matchAccount(entry.accountCode || "", accountCode, accountName)
@@ -877,7 +888,44 @@ const callController = (fn, query) =>
       .catch((e) => resolve({ status: 500, body: { success: false, message: e.message } }))
   })
 
-const getTrialBalance = (req, res) => memoStore.run(new Map(), () => buildTrialBalance(req, res))
+// Rows for ONE shop (or for the single-shop database when no shop context exists).
+const computeTrialRows = async (fromDate, toDate) => {
+  const acc = await callController(getAllAccounts, {})
+  if (!acc.body || !acc.body.success) throw new Error(acc.body?.message || "Failed to load accounts")
+
+  const seen = new Set()
+  const accounts = acc.body.data.filter((a) => {
+    const k = a.code || a.name
+    if (seen.has(k)) return false
+    seen.add(k)
+    return true
+  })
+
+  const rows = new Array(accounts.length)
+  let failed = 0
+  let next = 0
+  const worker = async () => {
+    while (next < accounts.length) {
+      const i = next++
+      const a = accounts[i]
+      const r = await callController(getAccountLedger, {
+        accountCode: a.code || "", accountName: a.name || "", fromDate, toDate, noSave: "1",
+      })
+      if (r.status !== 200 || !r.body || !r.body.success) { failed++; rows[i] = null; continue }
+      let debit = 0, credit = 0
+      ;(r.body.data.entries || []).forEach((e) => { debit += e.debit || 0; credit += e.credit || 0 })
+      rows[i] = {
+        account: { code: a.code, name: a.name, category: a.category, normalBalance: a.normalBalance },
+        currentDebit: debit,
+        currentCredit: credit,
+        openingBalance: r.body.data.summary?.openingBalance || 0,
+        closingBalance: r.body.data.summary?.closingBalance || 0,
+      }
+    }
+  }
+  await Promise.all(Array.from({ length: 10 }, worker))
+  return { rows: rows.filter(Boolean), failed, total: accounts.length }
+}
 
 const buildTrialBalance = async (req, res) => {
   try {
@@ -885,47 +933,39 @@ const buildTrialBalance = async (req, res) => {
     if (!fromDate || !toDate)
       return res.status(400).json({ success: false, message: "From date and to date are required" })
 
-    const acc = await callController(getAllAccounts, {})
-    if (!acc.body || !acc.body.success)
-      return res.status(500).json({ success: false, message: acc.body?.message || "Failed to load accounts" })
-
-    const seen = new Set()
-    const accounts = acc.body.data.filter((a) => {
-      const k = a.code || a.name
-      if (seen.has(k)) return false
-      seen.add(k)
-      return true
-    })
-
-    const rows = new Array(accounts.length)
+    const ctx = getContext()
+    let data = []
     let failed = 0
-    let next = 0
-    const worker = async () => {
-      while (next < accounts.length) {
-        const i = next++
-        const a = accounts[i]
-        const r = await callController(getAccountLedger, {
-          accountCode: a.code || "", accountName: a.name || "", fromDate, toDate, noSave: "1",
-        })
-        if (r.status !== 200 || !r.body || !r.body.success) { failed++; rows[i] = null; continue }
-        let debit = 0, credit = 0
-        ;(r.body.data.entries || []).forEach((e) => { debit += e.debit || 0; credit += e.credit || 0 })
-        rows[i] = {
-          account: { code: a.code, name: a.name, category: a.category, normalBalance: a.normalBalance },
-          currentDebit: debit,
-          currentCredit: credit,
-          openingBalance: r.body.data.summary?.openingBalance || 0,
-          closingBalance: r.body.data.summary?.closingBalance || 0,
-        }
-      }
-    }
-    await Promise.all(Array.from({ length: 10 }, worker))
+    let total = 0
+    let multiShop = false
 
-    res.status(200).json({ success: true, failed, total: accounts.length, data: rows.filter(Boolean) })
+    if (ctx && !ctx.shopId) {
+      // "All Shops": every shop has its own chart of accounts and its own ledger (code 1001 in shop A
+      // is a different account than 1001 in shop B). So run each shop on its own and keep them apart.
+      const shops = await Shop.find({}).sort({ name: 1 }).lean()
+      multiShop = shops.length > 0
+      for (const shop of shops) {
+        const r = await als.run({ ...ctx, shopId: String(shop._id) }, () =>
+          memoStore.run(new Map(), () => computeTrialRows(fromDate, toDate)),
+        )
+        failed += r.failed
+        total += r.total
+        r.rows.forEach((row) => data.push({ ...row, shop: { id: String(shop._id), name: shop.name } }))
+      }
+    } else {
+      const r = await computeTrialRows(fromDate, toDate)
+      data = r.rows
+      failed = r.failed
+      total = r.total
+    }
+
+    res.status(200).json({ success: true, failed, total, multiShop, data })
   } catch (error) {
     console.error("Error building trial balance:", error)
     res.status(500).json({ success: false, message: "Error building trial balance", error: error.message })
   }
 }
+
+const getTrialBalance = (req, res) => memoStore.run(new Map(), () => buildTrialBalance(req, res))
 
 module.exports = { getAllAccounts, getAccountLedger, getTrialBalance }

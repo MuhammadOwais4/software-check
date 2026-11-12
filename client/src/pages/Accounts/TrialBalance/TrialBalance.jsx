@@ -159,6 +159,8 @@ export default function TrialBalanceIntegrated() {
           currentDebit, currentCredit,
           closingDebit, closingCredit,
           hasActivity: currentDebit > 0 || currentCredit > 0 || openingBalance !== 0,
+          shopId: item.shop?.id || "",
+          shopName: item.shop?.name || "",
         }
       })
 
@@ -170,7 +172,7 @@ export default function TrialBalanceIntegrated() {
       // ✅ FIX 5: Final deduplication by account code (safety net)
       const finalSeen = new Set()
       const uniqueAccounts = activeAccounts.filter(entry => {
-        const key = entry.code || entry.name
+        const key = `${entry.shopId || ""}|${entry.code || entry.name}`
         if (finalSeen.has(key)) {
           console.warn(`⚠️ Duplicate removed at final step: ${key}`)
           return false
@@ -206,7 +208,8 @@ export default function TrialBalanceIntegrated() {
     const code = String(row?.code || "").toLowerCase()
     const name = String(row?.name || "").toLowerCase()
     const category = String(row?.category || "").toLowerCase()
-    return code.includes(term) || name.includes(term) || category.includes(term)
+    const shop = String(row?.shopName || "").toLowerCase()
+    return code.includes(term) || name.includes(term) || category.includes(term) || shop.includes(term)
   })
 
   const totals = filteredData.reduce(
@@ -243,7 +246,7 @@ export default function TrialBalanceIntegrated() {
 
     const rows = filteredData.map((row) => [
       row.code,
-      row.name,
+      row.shopName ? `${row.name} (${row.shopName})` : row.name,
       row.category,
       row.openingDebit,
       row.openingCredit,
@@ -420,7 +423,7 @@ export default function TrialBalanceIntegrated() {
                 {filteredData.length > 0 ? (
                   filteredData.map((row, i) => (
                     <tr
-                      key={`${row.code}-${i}`}
+                      key={`${row.shopId}-${row.code}-${i}`}
                       className={`${i % 2 === 0 ? "bg-white" : "bg-gray-50"} hover:bg-blue-50 transition-colors`}
                     >
                       <td className="px-4 py-3 text-sm text-gray-700 border border-gray-300 font-mono">
@@ -428,6 +431,11 @@ export default function TrialBalanceIntegrated() {
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-700 border border-gray-300">
                         {row.name}
+                        {row.shopName && (
+                          <span className="ml-2 inline-block rounded border border-orange-300 bg-orange-50 px-1.5 py-0.5 text-[11px] font-medium text-orange-700">
+                            {row.shopName}
+                          </span>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-700 border border-gray-300">
                         <span className="inline-block bg-blue-100 text-blue-800 px-2 py-1 rounded text-xs font-medium">

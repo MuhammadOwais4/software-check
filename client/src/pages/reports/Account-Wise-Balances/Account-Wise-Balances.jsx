@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo, useRef } from "react"
+import { Fragment, useState, useMemo, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -78,10 +78,10 @@ export default function AccountWiseBalances() {
           if (a.code === "SALES-DISC" || a.name === "SALES DISCOUNT") {
             if (closing !== 0) { credit = 0; debit = Math.abs(closing) }
           }
-          return { code: a.code, name: a.name, category: a.category, debit, credit }
+          return { code: a.code, name: a.name, category: a.category, debit, credit, shopId: item.shop?.id || "", shopName: item.shop?.name || "" }
         })
         .filter((r) => r.debit !== 0 || r.credit !== 0)
-        .sort((x, y) => String(x.name).localeCompare(String(y.name)))
+        .sort((x, y) => String(x.shopName).localeCompare(String(y.shopName)) || String(x.name).localeCompare(String(y.name)))
 
       if (run !== runRef.current) return
       setRows(out)
@@ -101,7 +101,7 @@ export default function AccountWiseBalances() {
     return rows.filter(
       (r) =>
         (category === "All" || r.category === category) &&
-        (!t || String(r.name).toLowerCase().includes(t) || String(r.code).toLowerCase().includes(t)),
+        (!t || String(r.name).toLowerCase().includes(t) || String(r.code).toLowerCase().includes(t) || String(r.shopName).toLowerCase().includes(t)),
     )
   }, [rows, search, category])
 
@@ -119,7 +119,7 @@ export default function AccountWiseBalances() {
       [],
       [null, "Account Wise Balances Sheet"],
       ["S.No", "Account Name", "Debit - Closing Balance", "Credit - Closing Balance"],
-      ...visible.map((r, i) => [i + 1, r.name, r.debit || null, r.credit || null]),
+      ...visible.map((r, i) => [i + 1, r.shopName ? `${r.name} (${r.shopName})` : r.name, r.debit || null, r.credit || null]),
       [null, "Total"],
     ]
     const ws = XLSX.utils.aoa_to_sheet(aoa)
@@ -223,20 +223,42 @@ export default function AccountWiseBalances() {
                     </td>
                   </tr>
                 )}
-                {visible.map((r, i) => (
-                  <tr key={`${r.code}-${i}`} className="hover:bg-gray-50">
-                    <td className="border px-3 py-1.5 text-center">{i + 1}</td>
-                    <td className="border px-3 py-1.5">{r.name}</td>
-                    <td className="border px-3 py-1.5 text-right tabular-nums">{money(r.debit)}</td>
-                    <td className="border px-3 py-1.5 text-right tabular-nums">{money(r.credit)}</td>
-                  </tr>
-                ))}
+                {visible.map((r, i) => {
+                  const startOfShop = r.shopName && (i === 0 || visible[i - 1].shopName !== r.shopName)
+                  const endOfShop = r.shopName && (i === visible.length - 1 || visible[i + 1].shopName !== r.shopName)
+                  const shopRows = endOfShop ? visible.filter((x) => x.shopName === r.shopName) : []
+                  return (
+                    <Fragment key={`${r.shopId}-${r.code}-${i}`}>
+                      {startOfShop && (
+                        <tr className="bg-orange-50">
+                          <td colSpan={4} className="border px-3 py-1.5 font-semibold text-orange-800">
+                            Shop: {r.shopName}
+                          </td>
+                        </tr>
+                      )}
+                      <tr className="hover:bg-gray-50">
+                        <td className="border px-3 py-1.5 text-center">{i + 1}</td>
+                        <td className="border px-3 py-1.5">{r.name}</td>
+                        <td className="border px-3 py-1.5 text-right tabular-nums">{money(r.debit)}</td>
+                        <td className="border px-3 py-1.5 text-right tabular-nums">{money(r.credit)}</td>
+                      </tr>
+                      {endOfShop && (
+                        <tr className="bg-orange-50 font-semibold">
+                          <td className="border px-3 py-1.5" />
+                          <td className="border px-3 py-1.5 text-orange-800">Total - {r.shopName}</td>
+                          <td className="border px-3 py-1.5 text-right tabular-nums">{money(shopRows.reduce((a, x) => a + x.debit, 0))}</td>
+                          <td className="border px-3 py-1.5 text-right tabular-nums">{money(shopRows.reduce((a, x) => a + x.credit, 0))}</td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  )
+                })}
               </tbody>
               {visible.length > 0 && (
                 <tfoot>
                   <tr className="bg-gray-100 font-bold">
                     <td className="border px-3 py-2" />
-                    <td className="border px-3 py-2">Total</td>
+                    <td className="border px-3 py-2">Total{visible.some((r) => r.shopName) ? " (All Shops)" : ""}</td>
                     <td className="border px-3 py-2 text-right tabular-nums">{money(totalDebit)}</td>
                     <td className="border px-3 py-2 text-right tabular-nums">{money(totalCredit)}</td>
                   </tr>
